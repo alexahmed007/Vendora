@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { rmSync } from 'node:fs';
 // Safety: this test creates and deletes tenants. Never run it against a real database.
 for (const v of ['MONGO_URL', 'POSTGRES_URL', 'MYSQL_URL', 'DB_URL']) {
   if (process.env[v]) { console.error(`Refusing to run: ${v} is set. Unset all database env vars (smoke uses local JSON files in ./data).`); process.exit(1); }
 }
+rmSync('./data', { recursive: true, force: true }); // start from a clean local store every run
 
 import { createTenant, listTenants, patchTenant, getTenant } from '../dist/store/tenants.js';
 import { tenantStore } from '../dist/store/tenantStore.js';

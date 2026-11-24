@@ -37,6 +37,7 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  *   'closed'      (ctx, code)  connection dropped
  *   'pairingCode' (ctx, code)  show this to the customer to link their number
  *   'halted'      (ctx, why)   session stopped and will NOT auto-reconnect
+ *   'released'    (ctx)        runtime removed (stop, halt or shutdown): clean up per-tenant timers
  */
 export class SessionManager extends EventEmitter {
   private readonly runtimes = new Map<string, Runtime>();
@@ -313,6 +314,7 @@ export class SessionManager extends EventEmitter {
     if (rt.offlineTimer) clearInterval(rt.offlineTimer);
     this.teardownSocket(rt);
     this.runtimes.delete(rt.ctx.id);
+    this.emit('released', rt.ctx);
   }
 
   private async haltRuntime(rt: Runtime, status: TenantStatus, why: string): Promise<void> {

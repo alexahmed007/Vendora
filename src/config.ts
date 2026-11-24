@@ -16,6 +16,24 @@ export const config = {
   timeZone: process.env.TIMEZONE || 'Africa/Lagos',
   logLevel: process.env.LOG_LEVEL || 'silent',
 
+  // The platform admin: the number of the control tenant (yours). Only that tenant's owner
+  // can run .admin commands, and pairing codes for new customers are sent to this chat.
+  adminNumber: (process.env.ADMIN_NUMBER || '').replace(/\D/g, ''),
+
+  // Menus: 'auto' = numbered text in the owner's own chat, buttons everywhere else;
+  // 'buttons' / 'numbered' force one style. Buttons from your own account to yourself are
+  // unverified, so 'auto' stays on the safe side there.
+  menuMode: (['auto', 'buttons', 'numbered'].includes(process.env.MENU_MODE ?? '') ? process.env.MENU_MODE : 'auto') as
+    'auto' | 'buttons' | 'numbered',
+  // Comma-separated user ids (digits) that must always get quick-reply buttons (iPhone workaround).
+  forceButtonUsers: (process.env.FORCE_BUTTON_USERS || '').split(',').map((x) => x.trim()).filter(Boolean),
+
+  // Router
+  commandCooldownMs: num(process.env.COMMAND_COOLDOWN_MS, 1_000),
+  handlerTimeoutMs: 60_000,
+  // Messages delivered while the bot was offline arrive as "append"; accept recent ones from others.
+  catchUpWindowMs: num(process.env.CATCH_UP_WINDOW_MS, 6 * 60 * 60_000),
+
   // Capacity
   maxSessions: num(process.env.MAX_SESSIONS, 3),
   sessionStartStaggerMs: num(process.env.SESSION_START_STAGGER_MS, 4000),

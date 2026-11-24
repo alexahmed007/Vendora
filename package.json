@@ -9,13 +9,14 @@
     "typecheck": "tsc --noEmit",
     "start": "node --max-old-space-size=350 dist/index.js",
     "cli": "node dist/cli.js",
-    "test": "npm run build && node scripts/smoke.mjs",
+    "test": "npm run build && node scripts/smoke.mjs && node scripts/smoke2.mjs",
     "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "^7.0.0-rc14",
     "dotenv": "^16.4.5",
+    "gifted-btns": "^1.0.2",
     "pino": "^9.0.0"
   },
   "optionalDependencies": {

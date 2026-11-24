@@ -1,51 +1,36 @@
 import http from 'node:http';
 import { config } from './config.js';
+import { notifyAdmin } from './core/adminNotify.js';
+import { rssMb, startMemoryGuard } from './core/memoryGuard.js';
+import { PluginHost } from './core/pluginHost.js';
 import { SessionManager } from './core/sessionManager.js';
-import { startMemoryGuard, rssMb } from './core/memoryGuard.js';
 import type { TenantContext } from './core/tenantContext.js';
+import { registerPromptListener } from './ui/buttonSession.js';
 
 const sessions = new SessionManager();
+const host = new PluginHost({ sessions });
 
-// ── Stage-1 test router ─────────────────────────────────────────────────────
-// Just enough to verify a linked number end to end: the owner sends "<prefix>ping".
-// Stage 2 replaces this with the real router (all-message loop, plugin hooks, menus).
-sessions.on('socket', (ctx: TenantContext, sock: any) => {
-  sock.ev.on('messages.upsert', async ({ messages, type }: any) => {
-    if (type !== 'notify') return;
-    for (const m of messages) { // every message in the batch, not just messages[0]
-      if (!m?.message || !m.key?.id) continue;
-      if (!ctx.firstSight(m.key.id)) continue; // per-tenant dedupe
+host.bind(sessions);
+// Menu taps must be heard on every socket, including after a reconnect.
+sessions.on('socket', (_ctx: TenantContext, sock: any) => registerPromptListener(sock));
 
-      const text: string = m.message.conversation || m.message.extendedTextMessage?.text || '';
-      if (text.trim().toLowerCase() !== `${config.prefix}ping`) continue;
-
-      const sender = m.key.participant || m.key.remoteJid;
-      if (!m.key.fromMe && !ctx.isOwnerJid(sender)) continue;
-
-      await sock
-        .sendMessage(m.key.remoteJid, { text: `pong · ${ctx.id} · ${rssMb()}MB` }, { quoted: m })
-        .catch((e: Error) => ctx.log.error(`ping reply failed: ${e.message}`));
-    }
-  });
+// A new customer's pairing code goes to the admin's own chat (and the console as a fallback).
+sessions.on('pairingCode', async (ctx: TenantContext, code: string) => {
+  const line = `🔗 Pairing code for *${ctx.id}* (${ctx.tenant.number}): *${code}*\nOn their phone: WhatsApp → Linked devices → Link with phone number.`;
+  console.log(`[pairing] ${ctx.id}: ${code}`);
+  await notifyAdmin(sessions, line);
 });
 
-sessions.on('pairingCode', (ctx: TenantContext, code: string) => {
-  // Stage 2 sends this through an admin chat. For now it goes to the console.
-  console.log(`[pairing] ${ctx.id} (${ctx.tenant.number}) → WhatsApp > Linked devices > Link with phone number > ${code}`);
-});
-sessions.on('halted', (ctx: TenantContext, why: string) => {
+sessions.on('halted', async (ctx: TenantContext, why: string) => {
   console.warn(`[halted] ${ctx.id}: ${why}`);
+  await notifyAdmin(sessions, `⚠️ *${ctx.id}* stopped: ${why}.`);
 });
 
 // ── Health endpoint (for the host's health check; exposes no phone numbers) ──
 const server = http.createServer((req, res) => {
   if (req.url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({
-      ok: true,
-      rssMb: rssMb(),
-      sessions: sessions.list().map((c) => ({ id: c.id, state: c.state })),
-    }));
+    res.end(JSON.stringify({ ok: true, rssMb: rssMb(), sessions: sessions.list().map((c) => ({ id: c.id, state: c.state })) }));
     return;
   }
   res.writeHead(404).end();
@@ -70,11 +55,12 @@ process.on('uncaughtException', (err) => console.error('[uncaughtException]', er
 process.on('unhandledRejection', (err) => console.error('[unhandledRejection]', err));
 
 // ── Boot ────────────────────────────────────────────────────────────────────
+await host.loadFromDir(new URL('./plugins/', import.meta.url));
+
 startMemoryGuard({
   onPressure: (under) => sessions.setAdmission(!under),
   onCritical: () => shutdown(1), // non-zero exit so the host restarts the process
 });
-
 setInterval(() => void sessions.enforcePlans(), config.planSweepMs).unref();
 
 await sessions.startAll();

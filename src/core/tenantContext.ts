@@ -22,6 +22,7 @@ export class TenantContext {
   private readonly groupMeta = new TtlCache<any>(config.groupMetaTtlMs, config.groupMetaMax);
   private readonly seen = new TtlCache<true>(config.seenMessageTtlMs, config.seenMessageMax);
   private readonly sent = new TtlCache<any>(config.sentCacheTtlMs, config.sentCacheMax);
+  private readonly lidToPn = new TtlCache<string>(6 * 60 * 60_000, 2_000);
 
   constructor(tenant: TenantRecord) {
     this.tenant = tenant;
@@ -93,6 +94,26 @@ export class TenantContext {
     if (!jid) return false;
     const n = digits(jid.split('@')[0].split(':')[0]);
     return n === this.tenant.number || this.tenant.sudo.includes(n);
+  }
+
+  /**
+   * Resolve a "@lid" sender to their phone-number JID using WhatsApp's own mapping.
+   * Returns null when the mapping isn't known yet. Phone JIDs are returned unchanged.
+   */
+  async resolvePn(jid: string): Promise<string | null> {
+    if (!jid.endsWith('@lid')) return jid;
+    const hit = this.lidToPn.get(jid);
+    if (hit) return hit;
+    try {
+      const pn = await this.trySock()?.signalRepository?.lidMapping?.getPNForLID?.(jid);
+      if (pn) {
+        this.lidToPn.set(jid, pn);
+        return pn;
+      }
+    } catch {
+      // mapping not available yet
+    }
+    return null;
   }
 
   // ── caches ──────────────────────────────────────────────────────────────
