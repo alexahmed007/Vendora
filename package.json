@@ -1,0 +1,34 @@
+{
+  "name": "reseller-bot",
+  "version": "0.1.0",
+  "description": "Multi-tenant WhatsApp bot for wholesale resellers",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "start": "node --max-old-space-size=350 dist/index.js",
+    "cli": "node dist/cli.js",
+    "test": "npm run build && node scripts/smoke.mjs",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
+    "dotenv": "^16.4.5",
+    "pino": "^9.0.0"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^12.5.0",
+    "mongoose": "^9.0.2",
+    "mysql2": "^3.16.0",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}
