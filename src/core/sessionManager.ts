@@ -20,6 +20,7 @@ interface Runtime {
   stopping: boolean;
   pairRequested: boolean;
   pairAttempts: number;
+  pairTimer?: NodeJS.Timeout;
   timer?: NodeJS.Timeout;
   offlineTimer?: NodeJS.Timeout;
   setOffline?: () => Promise<void>;
@@ -60,7 +61,15 @@ export class SessionManager extends EventEmitter {
 
   /** Start every runnable tenant, staggered so boot doesn't spike CPU and RAM. */
   async startAll(): Promise<void> {
-    const tenants = (await listTenants()).filter((t) => isRunnable(t));
+    const all = await listTenants();
+    const tenants = all.filter((t) => isRunnable(t));
+    if (all.length === 0) {
+      console.warn('[sessions] no tenants yet. Add one:  npm run cli -- add control <your-number-with-country-code>');
+    } else if (tenants.length === 0) {
+      console.warn(`[sessions] ${all.length} tenant(s) found but none runnable (paused, expired or needs_relink). Check: npm run cli -- list`);
+    } else {
+      console.log(`[sessions] starting ${Math.min(tenants.length, config.maxSessions)} of ${tenants.length} runnable tenant(s)`);
+    }
     const toStart = tenants.slice(0, config.maxSessions);
     if (tenants.length > toStart.length) {
       console.warn(`[sessions] ${tenants.length} runnable tenants but MAX_SESSIONS=${config.maxSessions}; the rest stay stopped`);
@@ -168,6 +177,14 @@ export class SessionManager extends EventEmitter {
       this.harden(rt, sock);
       rt.pairRequested = false;
       ctx.attach(sock);
+      ctx.log.info(state.creds.registered ? 'connecting...' : 'connecting... (not linked yet, a pairing code will follow)');
+
+      // Pairing normally starts on the first "qr" event. If none arrives, ask anyway after a few seconds.
+      if (rt.pairTimer) clearTimeout(rt.pairTimer);
+      if (!state.creds.registered) {
+        rt.pairTimer = setTimeout(() => void this.maybePair(rt, sock), 8_000);
+        rt.pairTimer.unref();
+      }
 
       sock.ev.on('creds.update', () => {
         saveCreds().catch((e: Error) => ctx.log.error(`saving credentials failed: ${e.message}`));
@@ -220,6 +237,7 @@ export class SessionManager extends EventEmitter {
     if (qr && rt.auth && !rt.auth.state.creds.registered) await this.maybePair(rt, sock);
 
     if (connection === 'open') {
+      if (rt.pairTimer) clearTimeout(rt.pairTimer);
       rt.retries = 0;
       ctx.markOnline();
       if (ctx.tenant.status !== 'active') {
@@ -237,6 +255,7 @@ export class SessionManager extends EventEmitter {
     if (connection !== 'close') return;
 
     if (rt.offlineTimer) clearInterval(rt.offlineTimer);
+    if (rt.pairTimer) clearTimeout(rt.pairTimer);
     ctx.markOffline();
     const code = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
     ctx.log.warn(`connection closed (${code ?? 'unknown'})`);
@@ -270,8 +289,9 @@ export class SessionManager extends EventEmitter {
 
   private async maybePair(rt: Runtime, sock: any): Promise<void> {
     const { ctx } = rt;
-    if (rt.pairRequested || rt.auth?.state.creds.registered) return;
+    if (rt.pairRequested || rt.auth?.state.creds.registered || !ctx.isCurrent(sock)) return;
     rt.pairRequested = true;
+    ctx.log.info('requesting pairing code...');
     try {
       const raw: string = await sock.requestPairingCode(ctx.tenant.number);
       rt.pairAttempts++;
@@ -311,6 +331,7 @@ export class SessionManager extends EventEmitter {
   private release(rt: Runtime): void {
     rt.stopping = true;
     if (rt.timer) clearTimeout(rt.timer);
+    if (rt.pairTimer) clearTimeout(rt.pairTimer);
     if (rt.offlineTimer) clearInterval(rt.offlineTimer);
     this.teardownSocket(rt);
     this.runtimes.delete(rt.ctx.id);

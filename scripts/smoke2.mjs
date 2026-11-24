@@ -7,6 +7,8 @@ import { EventEmitter } from 'node:events';
 for (const v of ['MONGO_URL', 'POSTGRES_URL', 'MYSQL_URL', 'DB_URL']) {
   if (process.env[v]) { console.error(`Refusing to run: ${v} is set. Unset all database env vars (this test uses local JSON files in ./data).`); process.exit(1); }
 }
+// Never let a real .env (with a production DB URL) leak into the tests.
+process.env.DOTENV_CONFIG_PATH = '/nonexistent.env';
 rmSync('./data', { recursive: true, force: true }); // start from a clean local store every run
 process.env.ADMIN_NUMBER = '2348012345678';
 process.env.COMMAND_COOLDOWN_MS = '200';

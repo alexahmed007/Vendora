@@ -47,7 +47,10 @@ let _adapter: Promise<Adapter> | null = null;
 
 export function getAdapter(): Promise<Adapter> {
   if (!_adapter) {
-    _adapter = _initAdapter();
+    _adapter = _initAdapter().then((a) => {
+      console.log(`[store] using ${a.name} backend${a.name === 'file' ? ' (./data, lost on redeploys: set MONGO_URL / POSTGRES_URL / MYSQL_URL / DB_URL for production)' : ''}`);
+      return a;
+    });
   }
   return _adapter;
 }

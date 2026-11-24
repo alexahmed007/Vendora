@@ -1,3 +1,5 @@
+// Must stay the first import: it loads .env so the CLI and the bot always use the same database.
+import './config.js';
 import { createTenant, listTenants, patchTenant, getTenant } from './store/tenants.js';
 
 const [cmd, ...args] = process.argv.slice(2);

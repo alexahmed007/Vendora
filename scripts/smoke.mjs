@@ -4,14 +4,17 @@ import { rmSync } from 'node:fs';
 for (const v of ['MONGO_URL', 'POSTGRES_URL', 'MYSQL_URL', 'DB_URL']) {
   if (process.env[v]) { console.error(`Refusing to run: ${v} is set. Unset all database env vars (smoke uses local JSON files in ./data).`); process.exit(1); }
 }
+// Never let a real .env (with a production DB URL) leak into the tests.
+process.env.DOTENV_CONFIG_PATH = '/nonexistent.env';
 rmSync('./data', { recursive: true, force: true }); // start from a clean local store every run
 
-import { createTenant, listTenants, patchTenant, getTenant } from '../dist/store/tenants.js';
-import { tenantStore } from '../dist/store/tenantStore.js';
-import { getAdapter } from '../dist/store/pluginStore.js';
-import { useStoreAuthState } from '../dist/core/dbAuthState.js';
-import { TenantContext } from '../dist/core/tenantContext.js';
-import { TtlCache } from '../dist/core/ttlCache.js';
+const { createTenant, listTenants, patchTenant, getTenant } = await import('../dist/store/tenants.js');
+const { tenantStore } = await import('../dist/store/tenantStore.js');
+const { getAdapter } = await import('../dist/store/pluginStore.js');
+const { useStoreAuthState } = await import('../dist/core/dbAuthState.js');
+const { TenantContext } = await import('../dist/core/tenantContext.js');
+const { TtlCache } = await import('../dist/core/ttlCache.js');
+
 
 let passed = 0;
 const ok = (name) => { passed++; console.log('  ✓', name); };
