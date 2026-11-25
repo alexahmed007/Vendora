@@ -39,7 +39,12 @@ export interface IncomingMessage {
   isOwner: boolean;
   /** True only for the owner of the control tenant (config.adminNumber). */
   isPlatformAdmin: boolean;
+  /** The account's own "message yourself" chat. Private output (dashboard, admin) belongs here. */
+  ownChatId: string;
+  isOwnChat: boolean;
   reply(text: string, extra?: Record<string, unknown>): Promise<any>;
+  /** Reply in the account's own chat instead of here, so group members and customers never see it. */
+  replyPrivate(text: string): Promise<any>;
 }
 
 const textOf = (c: any): string =>
@@ -81,6 +86,7 @@ export async function buildIncoming(
 
   const isOwner = fromMe || ctx.isOwnerJid(senderPn ?? senderJid);
   const isPlatformAdmin = isOwner && config.adminNumber !== '' && ctx.tenant.number === config.adminNumber;
+  const isOwnChat = cleanJid(chatId) === cleanJid(ownJid);
   const quotedId: string | null = (content as any)[type]?.contextInfo?.stanzaId ?? null;
 
   return {
@@ -106,6 +112,12 @@ export async function buildIncoming(
     isCatchUp,
     isOwner,
     isPlatformAdmin,
+    ownChatId: ownJid,
+    isOwnChat,
     reply: (text, extra) => ctx.getSock().sendMessage(chatId, { text, ...extra }, { quoted: raw }),
+    replyPrivate: (text) =>
+      isOwnChat
+        ? ctx.getSock().sendMessage(ownJid, { text }, { quoted: raw })
+        : ctx.getSock().sendMessage(ownJid, { text }),
   };
 }

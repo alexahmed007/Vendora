@@ -8,9 +8,13 @@ export interface TenantSettings {
   contactLine: string;
   /** Default markup applied to vendor prices, in percent. */
   markupPercent: number;
+  /** Round selling prices up to a multiple of this (0 = off). */
+  roundingStep: number;
+  /** Used when a vendor wrote a bare number with no currency. */
+  currencySymbol: string;
 }
 
-export const DEFAULT_SETTINGS: TenantSettings = { brandName: '', contactLine: '', markupPercent: 0 };
+export const DEFAULT_SETTINGS: TenantSettings = { brandName: '', contactLine: '', markupPercent: 0, roundingStep: 100, currencySymbol: '₦' };
 
 export async function getSettings(ctx: TenantContext): Promise<TenantSettings> {
   const saved = await ctx.store('settings').get('main');

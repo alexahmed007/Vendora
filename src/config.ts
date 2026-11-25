@@ -28,11 +28,21 @@ export const config = {
   // Comma-separated user ids (digits) that must always get quick-reply buttons (iPhone workaround).
   forceButtonUsers: (process.env.FORCE_BUTTON_USERS || '').split(',').map((x) => x.trim()).filter(Boolean),
 
+  // Logs every reply that targets a pending menu, to diagnose taps that do nothing.
+  menuDebug: process.env.MENU_DEBUG === 'true',
+
   // Router
   commandCooldownMs: num(process.env.COMMAND_COOLDOWN_MS, 1_000),
   handlerTimeoutMs: 60_000,
   // Messages delivered while the bot was offline arrive as "append"; accept recent ones from others.
   catchUpWindowMs: num(process.env.CATCH_UP_WINDOW_MS, 6 * 60 * 60_000),
+
+  // Vendor posts: how long to wait for more photos / a caption before treating an item as complete.
+  albumQuietMs: num(process.env.ALBUM_QUIET_MS, 20_000),
+  albumBurstMs: num(process.env.ALBUM_BURST_MS, 8_000),
+  // Housekeeping for the product catalog
+  catalogMaxAgeMs: 30 * 24 * 60 * 60_000,
+  catalogMaxItems: 1_500,
 
   // Capacity
   maxSessions: num(process.env.MAX_SESSIONS, 3),
