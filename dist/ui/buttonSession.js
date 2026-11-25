@@ -108,6 +108,9 @@ function handleOne(sock, msg) {
         return;
     const sender = senderOf(sock, msg);
     const m = msg.message;
+    if (config.menuDebug && pending.size > 0) {
+        console.log(`[buttonSession:debug] upsert while a menu is pending · fromMe=${Boolean(msg.key?.fromMe)} · sender=${sender} · type=${Object.keys(m).join(',')}`);
+    }
     // 1) A tap or quoted reply to one specific menu.
     const quotedId = contextInfoOf(m)?.stanzaId;
     const quoted = quotedId ? pending.get(quotedId) : undefined;
@@ -120,6 +123,7 @@ function handleOne(sock, msg) {
             if (n !== null)
                 return resolveSelection(quotedId, quoted, n === 0 ? 'cancel' : `opt_${n - 1}`);
         }
+        console.warn('[buttonSession] a reply targets a pending menu but no choice could be read. Raw message:', JSON.stringify(m));
         return;
     }
     // 2) A bare number typed in the same chat, for numbered menus.
@@ -159,9 +163,17 @@ export function registerPromptListener(sock) {
     });
 }
 // ── prompting ───────────────────────────────────────────────────────────────
-const isSelfChat = (sock, chatId) => {
-    const own = [cleanJid(sock?.user?.id), cleanJid(sock?.user?.lid)].filter(Boolean);
-    return own.includes(cleanJid(chatId));
+const ownIds = (sock) => [cleanJid(sock?.user?.id), cleanJid(sock?.user?.lid)].filter(Boolean);
+const isSelfChat = (sock, chatId) => ownIds(sock).includes(cleanJid(chatId));
+/**
+ * The bot IS the owner's WhatsApp account. Buttons are for the *recipient* of a message, so the
+ * account's own owner can't use buttons on menus their own account sent (in their own chat or in
+ * a group): they show up but do nothing. Whenever the owner is the one who must answer, use
+ * numbered text. Buttons stay for other people (customers) answering the reseller's account.
+ */
+const answeredByOwner = (sock, ids) => {
+    const own = ownIds(sock);
+    return ids.some((id) => own.includes(id));
 };
 function numberedText(body, options, cancelLabel, minutes) {
     const lines = options.map((o, i) => `*${i + 1}.* ${o.label}${o.description ? ` — ${o.description}` : ''}`);
@@ -185,7 +197,8 @@ export async function promptMenu(sock, message, chatId, userIds, cfg) {
         head.push(`_${cfg.subtitle}_`);
     head.push(cfg.text);
     const body = head.join('\n');
-    const numbered = config.menuMode === 'numbered' || (config.menuMode === 'auto' && isSelfChat(sock, chatId));
+    const numbered = config.menuMode === 'numbered' ||
+        (config.menuMode === 'auto' && (isSelfChat(sock, chatId) || answeredByOwner(sock, ids)));
     const opts = { quoted: message };
     let sent;
     let textMode = numbered; // true when the menu went out as plain numbered text

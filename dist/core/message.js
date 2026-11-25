@@ -31,6 +31,7 @@ export async function buildIncoming(ctx, sock, services, raw, isCatchUp) {
     const userIds = [...new Set([cleanJid(senderPn), cleanJid(senderJid)].filter(Boolean))];
     const isOwner = fromMe || ctx.isOwnerJid(senderPn ?? senderJid);
     const isPlatformAdmin = isOwner && config.adminNumber !== '' && ctx.tenant.number === config.adminNumber;
+    const isOwnChat = cleanJid(chatId) === cleanJid(ownJid);
     const quotedId = content[type]?.contextInfo?.stanzaId ?? null;
     return {
         ctx,
@@ -55,6 +56,11 @@ export async function buildIncoming(ctx, sock, services, raw, isCatchUp) {
         isCatchUp,
         isOwner,
         isPlatformAdmin,
+        ownChatId: ownJid,
+        isOwnChat,
         reply: (text, extra) => ctx.getSock().sendMessage(chatId, { text, ...extra }, { quoted: raw }),
+        replyPrivate: (text) => isOwnChat
+            ? ctx.getSock().sendMessage(ownJid, { text }, { quoted: raw })
+            : ctx.getSock().sendMessage(ownJid, { text }),
     };
 }

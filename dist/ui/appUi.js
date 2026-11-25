@@ -8,8 +8,12 @@ export const appCtxFrom = (m) => ({
 });
 export const go = (to, params) => ({ kind: 'go', to, params });
 export const back = () => ({ kind: 'back' });
+/** Swap the current screen (e.g. next page of a list) without adding a Back step. */
+export const replace = (to, params) => ({ kind: 'replace', to, params });
 export const stay = (notice) => ({ kind: 'stay', notice });
 export const exit = (message) => ({ kind: 'exit', message });
+// One live app per tenant + chat: opening .menu again replaces the old session instead of stacking a second one.
+const activeApps = new Map();
 const BACK = '__back';
 const EXIT = '__exit';
 const MAX_STEPS = 60;
@@ -22,6 +26,18 @@ const defaultPrompt = (sock, app, view, options) => promptMenu(sock, app.message
 });
 /** Run an app until the user exits, cancels, times out, or the tenant goes offline. */
 export async function runApp(app, screens, start, opts = {}) {
+    const key = `${app.ctx.id}|${app.chatId}`;
+    const token = Symbol('app');
+    activeApps.set(key, token);
+    try {
+        await runLoop(app, screens, start, opts, () => activeApps.get(key) === token);
+    }
+    finally {
+        if (activeApps.get(key) === token)
+            activeApps.delete(key);
+    }
+}
+async function runLoop(app, screens, start, opts, isCurrent) {
     const prompt = opts.prompt ?? defaultPrompt;
     const stack = [{ name: start, params: undefined }];
     for (let step = 0; step < MAX_STEPS && stack.length > 0; step++) {
@@ -43,6 +59,8 @@ export async function runApp(app, screens, start, opts = {}) {
         if (stack.length > 1)
             options.push({ label: '⬅️ Back', value: BACK });
         const result = await prompt(sock, app, withNotice, options);
+        if (!isCurrent())
+            return; // a newer session took over while we were waiting; stay quiet
         if (result.timedOut || result.cancelled || result.value === null) {
             if (result.timedOut)
                 await sock.sendMessage(app.chatId, { text: '⌛ Menu closed (no response).' }).catch(() => undefined);
@@ -61,6 +79,9 @@ export async function runApp(app, screens, start, opts = {}) {
                 break;
             case 'back':
                 stack.pop();
+                break;
+            case 'replace':
+                stack[stack.length - 1] = { name: nav.to, params: nav.params };
                 break;
             case 'stay':
                 if (nav.notice)
