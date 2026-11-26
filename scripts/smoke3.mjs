@@ -11,7 +11,6 @@ process.env.DOTENV_CONFIG_PATH = '/nonexistent.env';
 rmSync('./data', { recursive: true, force: true });
 process.env.ADMIN_NUMBER = '2348012345678';
 process.env.COMMAND_COOLDOWN_MS = '1';
-process.env.MENU_MODE = 'auto';
 
 const { parsePrices, pickPrimary } = await import('../dist/lib/priceParser.js');
 const { cleanCaption } = await import('../dist/lib/captionCleaner.js');
@@ -21,7 +20,7 @@ const { detectStockSignal } = await import('../dist/lib/stockSignals.js');
 const { mediaOf, albumExpected } = await import('../dist/lib/mediaInfo.js');
 const { PluginHost } = await import('../dist/core/pluginHost.js');
 const { TenantContext } = await import('../dist/core/tenantContext.js');
-const bs = await import('../dist/ui/buttonSession.js');
+const bs = await import('../dist/ui/menuSession.js');
 const ingest = await import('../dist/plugins/ingest.js');
 const { listProducts, getProduct, countByStatus, pruneCatalog } = await import('../dist/core/catalog.js');
 const { listVendors, getVendor } = await import('../dist/core/vendors.js');
@@ -264,8 +263,8 @@ ok('dashboard: bad price re-asked, own price saved (₦18,500), item approved');
 
 // vendors + settings through the menu
 await sleep(1100);
-say('.menu'); await must(() => /Approved: 1/.test(lastText(rsock)));
-say('2'); await must(() => /Vendor groups/.test(lastText(rsock)) && /Shoe Plug/.test(lastText(rsock)));
+say('.menu'); await must(() => /New items: 1/.test(lastText(rsock)));
+say('3'); await must(() => /Vendor groups/.test(lastText(rsock)) && /Shoe Plug/.test(lastText(rsock)));
 say('1'); await must(() => /importing/.test(lastText(rsock)));
 say('1'); await must(() => /Markup % for this vendor/.test(lastText(rsock)));
 say('35'); await must(() => /Markup for this vendor: 35%/.test(lastText(rsock)));
@@ -307,7 +306,7 @@ sayA('.admin', VG);                                                             
 await must(() => asock.sent.length >= 1);
 assert.equal(asock.sent[0].jid, ctlChat); assert.match(lastText(asock), /Admin/); assert.ok(!asock.sent.some((x) => x.jid === VG));
 sayA('1'); await must(() => /Customers/.test(lastText(asock)) && /beta/.test(lastText(asock)));
-assert.match(lastText(asock), /\*1\.\* alpha · pending/); assert.match(lastText(asock), /\*2\.\* beta · pending/);
+assert.match(lastText(asock), /1️⃣  \*alpha · pending\*/); assert.match(lastText(asock), /2️⃣  \*beta · pending\*/);
 sayA('2'); await must(() => /Number: 2347022222222/.test(lastText(asock)));
 assert.match(lastText(asock), /Start \/ resume/);
 sayA('1'); await must(() => /Started/.test(lastText(asock)));

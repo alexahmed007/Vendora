@@ -1,5 +1,5 @@
-import { cleanJid } from '../core/jid.js';
-import { promptMenu } from './buttonSession.js';
+import { chatKey } from '../core/jid.js';
+import { plainTextOf, promptMenu, quotedIdOf, renderAsk, senderOf, warnOnce } from './menuSession.js';
 export const appCtxFrom = (m) => ({
     ctx: m.ctx,
     message: m.raw,
@@ -12,7 +12,8 @@ export const back = () => ({ kind: 'back' });
 export const replace = (to, params) => ({ kind: 'replace', to, params });
 export const stay = (notice) => ({ kind: 'stay', notice });
 export const exit = (message) => ({ kind: 'exit', message });
-// One live app per tenant + chat: opening .menu again replaces the old session instead of stacking a second one.
+// One live app per tenant + chat: opening .menu again replaces the old session (and closes any
+// question it was waiting on) instead of stacking a second one.
 const activeApps = new Map();
 const BACK = '__back';
 const EXIT = '__exit';
@@ -23,17 +24,19 @@ const defaultPrompt = (sock, app, view, options) => promptMenu(sock, app.message
     text: view.text,
     footer: view.footer,
     options,
+    cancelLabel: 'Close',
 });
 /** Run an app until the user exits, cancels, times out, or the tenant goes offline. */
 export async function runApp(app, screens, start, opts = {}) {
     const key = `${app.ctx.id}|${app.chatId}`;
     const token = Symbol('app');
-    activeApps.set(key, token);
+    activeApps.get(key)?.abort();
+    activeApps.set(key, { token, abort: () => app.cancelAsk?.() });
     try {
-        await runLoop(app, screens, start, opts, () => activeApps.get(key) === token);
+        await runLoop(app, screens, start, opts, () => activeApps.get(key)?.token === token);
     }
     finally {
-        if (activeApps.get(key) === token)
+        if (activeApps.get(key)?.token === token)
             activeApps.delete(key);
     }
 }
@@ -41,6 +44,8 @@ async function runLoop(app, screens, start, opts, isCurrent) {
     const prompt = opts.prompt ?? defaultPrompt;
     const stack = [{ name: start, params: undefined }];
     for (let step = 0; step < MAX_STEPS && stack.length > 0; step++) {
+        if (!isCurrent())
+            return;
         const { name, params } = stack[stack.length - 1];
         const screen = screens[name];
         if (!screen)
@@ -73,6 +78,8 @@ async function runLoop(app, screens, start, opts, isCurrent) {
         if (result.value === EXIT)
             return;
         const nav = await screen.select(result.value, app, params);
+        if (!isCurrent())
+            return; // replaced while we were busy (e.g. a question was cancelled): do nothing more
         switch (nav.kind) {
             case 'go':
                 stack.push({ name: nav.to, params: nav.params });
@@ -95,8 +102,10 @@ async function runLoop(app, screens, start, opts, isCurrent) {
     }
 }
 /**
- * Ask a question in free text and wait for the reply (in the same chat, from the same person).
- * Returns null on cancel, timeout, or after too many bad replies.
+ * Ask a question in free text and wait for the answer from the same person. The answer can be a
+ * swipe-reply to the question OR simply typed in the same chat (the owner's own chat counts
+ * whether WhatsApp addresses it by phone number or LID). Returns null on cancel, timeout, or
+ * after too many unusable answers.
  */
 export async function askValue(app, o) {
     const attempts = o.attempts ?? 3;
@@ -110,25 +119,36 @@ export async function askValue(app, o) {
         catch {
             return null;
         }
-        await sock.sendMessage(app.chatId, { text: `${o.prompt}\n\n_Reply here, or send *cancel*._` }, { quoted: app.message });
+        const prompt = await sock.sendMessage(app.chatId, { text: renderAsk(o.prompt, timeoutMs) }, app.message ? { quoted: app.message } : undefined);
+        const promptId = prompt?.key?.id;
+        const here = chatKey(sock, app.chatId);
         const reply = await new Promise((resolve) => {
             const done = (v) => {
                 clearTimeout(timer);
                 sock.ev.off('messages.upsert', onUpsert);
+                if (app.cancelAsk === cancel)
+                    app.cancelAsk = undefined;
                 resolve(v);
             };
+            const cancel = () => done(null);
+            app.cancelAsk = cancel;
             const onUpsert = (upsert) => {
                 if (upsert?.type !== 'notify')
                     return;
                 for (const msg of upsert.messages ?? []) {
-                    if (msg?.key?.remoteJid !== app.chatId || !msg.message)
+                    if (!msg?.message)
                         continue;
-                    const sender = msg.key.fromMe ? cleanJid(sock.user?.id) : cleanJid(msg.key.participant || msg.key.remoteJid);
-                    if (!allowed.has(sender))
+                    const text = plainTextOf(msg.message)?.trim();
+                    if (!text)
                         continue;
-                    const text = msg.message.conversation ?? msg.message.extendedTextMessage?.text;
-                    if (typeof text === 'string' && text.trim() !== '')
-                        return done(text.trim());
+                    if (!allowed.has(senderOf(sock, msg)))
+                        continue;
+                    const quoted = promptId !== undefined && quotedIdOf(msg.message) === promptId;
+                    if (!quoted && chatKey(sock, msg.key?.remoteJid) !== here) {
+                        warnOnce(`ask:${msg.key?.remoteJid}`, `[ask] ignored a reply from the right person in a different chat (${msg.key?.remoteJid} vs ${app.chatId}). Swipe-reply the question, or tell the developer.`);
+                        continue;
+                    }
+                    return done(text);
                 }
             };
             const timer = setTimeout(() => done(null), timeoutMs);

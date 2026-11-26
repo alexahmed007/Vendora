@@ -20,17 +20,6 @@ export const config = {
   // can run .admin commands, and pairing codes for new customers are sent to this chat.
   adminNumber: (process.env.ADMIN_NUMBER || '').replace(/\D/g, ''),
 
-  // Menus: 'auto' = numbered text in the owner's own chat, buttons everywhere else;
-  // 'buttons' / 'numbered' force one style. Buttons from your own account to yourself are
-  // unverified, so 'auto' stays on the safe side there.
-  menuMode: (['auto', 'buttons', 'numbered'].includes(process.env.MENU_MODE ?? '') ? process.env.MENU_MODE : 'auto') as
-    'auto' | 'buttons' | 'numbered',
-  // Comma-separated user ids (digits) that must always get quick-reply buttons (iPhone workaround).
-  forceButtonUsers: (process.env.FORCE_BUTTON_USERS || '').split(',').map((x) => x.trim()).filter(Boolean),
-
-  // Logs every reply that targets a pending menu, to diagnose taps that do nothing.
-  menuDebug: process.env.MENU_DEBUG === 'true',
-
   // Router
   commandCooldownMs: num(process.env.COMMAND_COOLDOWN_MS, 1_000),
   handlerTimeoutMs: 60_000,
@@ -43,6 +32,13 @@ export const config = {
   // Housekeeping for the product catalog
   catalogMaxAgeMs: 30 * 24 * 60 * 60_000,
   catalogMaxItems: 1_500,
+
+  // Posting
+  publishTickMs: num(process.env.PUBLISH_TICK_MS, 5_000),
+  maxMediaPerPost: num(process.env.MAX_MEDIA_PER_POST, 6),
+  maxImageBytes: num(process.env.MAX_IMAGE_MB, 10) * 1024 * 1024,
+  maxVideoBytes: num(process.env.MAX_VIDEO_MB, 25) * 1024 * 1024,
+  statusAudienceMax: num(process.env.STATUS_AUDIENCE_MAX, 800),
 
   // Capacity
   maxSessions: num(process.env.MAX_SESSIONS, 3),

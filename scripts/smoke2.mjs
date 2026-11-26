@@ -12,14 +12,13 @@ process.env.DOTENV_CONFIG_PATH = '/nonexistent.env';
 rmSync('./data', { recursive: true, force: true }); // start from a clean local store every run
 process.env.ADMIN_NUMBER = '2348012345678';
 process.env.COMMAND_COOLDOWN_MS = '200';
-process.env.MENU_MODE = 'auto';
 
 const { PluginHost } = await import('../dist/core/pluginHost.js');
 const { TenantContext } = await import('../dist/core/tenantContext.js');
 const { definePlugin } = await import('../dist/core/plugin.js');
 const { runApp, go, back, stay } = await import('../dist/ui/appUi.js');
-const bs = await import('../dist/ui/buttonSession.js');
-const { getSettings, updateSettings } = await import('../dist/core/settings.js');
+const bs = await import('../dist/ui/menuSession.js');
+const { getSettings, updateSettings, DEFAULT_SETTINGS } = await import('../dist/core/settings.js');
 const { createTenant, listTenants } = await import('../dist/store/tenants.js');
 const corePlugin = (await import('../dist/plugins/core.js')).default;
 const adminPlugin = (await import('../dist/plugins/admin.js')).default;
@@ -57,6 +56,8 @@ const msg = ({ id, chat, text, from, fromMe = false, ts, pushName = 'Cust', extr
 const up = (sock, messages, type = 'notify') => sock.ev.emit('messages.upsert', { messages, type });
 const rec = (id, number) => ({ id, number, status: 'active', plan: 't', expiresAt: null, createdAt: 0, sudo: [] });
 const online = (tenant, sock) => { const c = new TenantContext(tenant); c.attach(sock); c.markOnline(); return c; };
+const lastText = (s) => s.sent.at(-1)?.content?.text ?? '';
+const lastNudge = (s) => s.sent.slice(-3).map((x) => x.content?.text ?? '').join('\n');
 
 const started = [];
 const fakeSessions = { start: async (t) => { started.push(t); return {}; }, stop: async () => {}, halt: async () => {}, get: () => undefined, list: () => [] };
@@ -190,46 +191,45 @@ assert.match(shown[2].view.text, /✅ did it/);
 assert.ok(!shown[0].options.some((o) => o.value === '__back') && shown[1].options.some((o) => o.value === '__back'));
 ok('runApp: go / stay+notice / back / cancel; Back only offered below the first screen');
 
-// 10. promptMenu: numbered fallback, self-chat numbered, quick-reply taps, wrong-user taps, timeout
-const calls = { buttons: 0, list: 0 };
-bs.setMenuTransport({ sendButtons: async () => { calls.buttons++; throw new Error('boom'); }, sendList: async () => { calls.list++; throw new Error('boom'); } });
+// 10. numbered menus (USSD style): the look, plain-number and swipe replies, wrong people, nudges, timeout
 const ps = fakeSock(`${CTL}:5@s.whatsapp.net`); bs.registerPromptListener(ps);
-const opts3 = [{ label: 'One', value: 'v1' }, { label: 'Two', value: 'v2' }, { label: 'Three', value: 'v3' }];
+const opts3 = [{ label: 'One', value: 'v1', description: 'first choice' }, { label: 'Two', value: 'v2' }, { label: 'Three', value: 'v3' }];
 const chatU = `${CUST}@s.whatsapp.net`;
-let p = bs.promptMenu(ps, { key: { id: 'X' } }, chatU, [CUST], { text: 'Pick', options: opts3 });
+let p = bs.promptMenu(ps, { key: { id: 'X' } }, chatU, [CUST], { title: 'Pick one', subtitle: 'A subtitle', text: 'Choose:', options: opts3 });
 await must(() => ps.sent.length === 1);
-assert.match(ps.sent[0].content.text, /\*2\.\* Two/);
-up(ps, [msg({ chat: chatU, from: `${VENDOR}@s.whatsapp.net`, text: '2' })]);       // someone else: ignored
+const look = ps.sent[0].content.text;
+assert.match(look, /\*Pick one\*\n_A subtitle_\n┄{10,}\nChoose:/); assert.match(look, /1️⃣  \*One\*\n {5}first choice/); assert.match(look, /3️⃣  \*Three\*/);
+assert.match(look, /↩️ _Reply to this message with a number_\n0️⃣ Cancel {3}⏳ Expires in 3 mins/);
+up(ps, [msg({ chat: chatU, from: `${VENDOR}@s.whatsapp.net`, text: '2' })]);       // someone else: ignored, not consumed
+up(ps, [msg({ chat: chatU, from: chatU, text: '9' })]);                              // out of range: a nudge, the menu stays open
+await must(() => /Reply with a number from \*1\* to \*3\*/.test(lastNudge(ps)));
 up(ps, [msg({ chat: chatU, from: chatU, text: '3' })]);
 assert.deepEqual(await p, { value: 'v3', timedOut: false, cancelled: false });
-ok('menu: buttons transport failure → numbered text fallback; answered by number; other people ignored');
+ok('menu look (title, subtitle, dividers, keycap digits, descriptions, footer); a bare number answers; others ignored; invalid numbers get a nudge');
 
 const selfJid = `${CTL}@s.whatsapp.net`;
-calls.buttons = 0; calls.list = 0;
+p = bs.promptMenu(ps, { key: { id: 'Q' } }, chatU, [CUST], { text: 'Pick', options: opts3 });
+await must(() => ps.sent.length === 3);
+const menuId = ps.sent.at(-1).key.id;
+const swipe = (text, who = chatU) => msg({ chat: chatU, from: who, extra: { extendedTextMessage: { text, contextInfo: { stanzaId: menuId } } } });
+up(ps, [swipe('2', `${VENDOR}@s.whatsapp.net`)]);                                    // right menu, wrong person
+up(ps, [swipe('hello')]);                                                            // quoted but not a choice: nudge
+await must(() => ps.sent.length === 4 && /Reply with a number/.test(lastText(ps)));
+up(ps, [swipe('2')]);
+assert.equal((await p).value, 'v2');
 p = bs.promptMenu(ps, { key: { id: 'Y' } }, selfJid, [CTL], { text: 'Pick', options: opts3 });
-await must(() => ps.sent.length === 2);
-assert.equal(calls.buttons + calls.list, 0, 'self-chat uses numbered text, never buttons, in auto mode');
+await must(() => ps.sent.length === 5);
 up(ps, [msg({ chat: selfJid, fromMe: true, text: '1' })]);
 assert.equal((await p).value, 'v1');
 p = bs.promptMenu(ps, { key: { id: 'Z' } }, selfJid, [CTL], { text: 'Pick', options: opts3 });
-await must(() => ps.sent.length === 3);
-up(ps, [msg({ chat: selfJid, fromMe: true, text: '0' })]);
+await must(() => ps.sent.length === 6);
+up(ps, [msg({ chat: selfJid, fromMe: true, text: 'cancel' })]);
 assert.equal((await p).cancelled, true);
-ok('menu: own chat is numbered text; the owner’s own (fromMe) replies count; 0 cancels');
-
-bs.setMenuTransport({ sendButtons: async () => ({ key: { id: 'BTN1' } }), sendList: async () => ({ key: { id: 'LST1' } }) });
-p = bs.promptMenu(ps, { key: { id: 'Q' } }, chatU, [CUST], { text: 'Pick', options: opts3.slice(0, 2) });
-await sleep(20);
-const tap = (id, who, selectedId) => msg({ chat: chatU, from: who, extra: { templateButtonReplyMessage: { selectedId, contextInfo: { stanzaId: id } } } });
-up(ps, [tap('BTN1', `${VENDOR}@s.whatsapp.net`, 'opt_0')]);       // wrong person taps: not consumed
-up(ps, [tap('BTN1', chatU, 'opt_1')]);
-assert.equal((await p).value, 'v2');
 p = bs.promptMenu(ps, { key: { id: 'R' } }, chatU, [CUST], { text: 'Pick', options: opts3, ttlMs: 60 });
 assert.equal((await p).timedOut, true);
-ok('menu: quick-reply tap resolves only for the right person; unanswered menus time out');
+ok('menu: swipe-reply works (wrong person ignored), the owner’s own typed replies count, cancel / 0 close it, unanswered menus time out');
 
 // 11. end to end: owner opens .menu in their own chat and changes the markup
-bs.setMenuTransport({ sendButtons: async () => { throw new Error('should not be used in own chat'); }, sendList: async () => { throw new Error('nope'); } });
 const e2e = fakeSock(`${CTL}:5@s.whatsapp.net`);
 const ctl2 = online(rec('ctl', CTL), e2e);
 const h3 = new PluginHost({ sessions: fakeSessions }); h3.register(corePlugin); h3.register(menuPlugin);
@@ -238,7 +238,7 @@ const say = (text) => up(e2e, [msg({ chat: selfJid, fromMe: true, text })]);
 say('.menu');
 await must(() => e2e.sent.length >= 1);
 assert.match(e2e.sent[0].content.text, /Reseller dashboard/);
-say('3');                                                     // ⚙️ Settings (Home: 1 Items, 2 Vendor groups, 3 Settings)
+say('4');                                                     // ⚙️ Settings (Home: 1 Items, 2 Posting, 3 Vendor groups, 4 Settings)
 await must(() => e2e.sent.length >= 2);
 assert.match(e2e.sent[1].content.text, /\*Settings\*/);
 say('3');                                                     // 💹 Default markup %
@@ -255,21 +255,62 @@ say('0');                                                     // cancel
 await sleep(50);
 ok('end to end: .menu → Settings → markup (bad input re-asked, “12.5%” accepted) → saved → cancel');
 
-// 11b. the owner is the account itself: buttons are inert for them, so menus are numbered everywhere
-let transportUsed = 0;
-bs.setMenuTransport({ sendButtons: async () => { transportUsed++; return { key: { id: 'NO' } }; }, sendList: async () => { transportUsed++; return { key: { id: 'NO' } }; } });
-const gp = fakeSock(`${CTL}:5@s.whatsapp.net`); bs.registerPromptListener(gp);
-let pg = bs.promptMenu(gp, { key: { id: 'G1' } }, GROUP, [CTL], { text: 'Pick', options: opts3 });
-await must(() => gp.sent.length === 1);
-assert.equal(transportUsed, 0, 'owner answering in a group must get numbered text, not buttons');
-assert.match(gp.sent[0].content.text, /\*2\.\* Two/);
-up(gp, [msg({ chat: GROUP, fromMe: true, text: '2' })]);
-assert.equal((await pg).value, 'v2');
-// ...while a customer answering the reseller's account still gets buttons
-pg = bs.promptMenu(gp, { key: { id: 'G2' } }, chatU, [CUST], { text: 'Pick', options: opts3.slice(0, 2) });
-await sleep(20);
-assert.equal(transportUsed, 1);
-ok('menus are numbered whenever the owner answers (own chat or group); customers still get buttons');
+// 11b. the reported bug: answers typed in the owner's own chat when WhatsApp addresses that chat by its LID
+const lidSock = fakeSock(`${CTL}:5@s.whatsapp.net`); lidSock.user.lid = '99887766:5@lid'; bs.registerPromptListener(lidSock);
+const lidCtx = online(rec('ctl', CTL), lidSock);
+const { askText } = await import('../dist/ui/appUi.js');
+const LIDCHAT = '99887766@lid';
+const lapp = { ctx: lidCtx, message: undefined, chatId: `${CTL}@s.whatsapp.net`, userIds: [CTL] };
+let ans = askText(lapp, 'Business name?', 60); await must(() => lidSock.sent.length === 1);
+assert.match(lidSock.sent[0].content.text, /✏️ Business name\?\n┄{10,}\n↩️ _Reply to this message with your answer_\nSend \*cancel\* to stop {3}⏳ Expires in 2 mins/);
+up(lidSock, [msg({ chat: LIDCHAT, fromMe: true, text: 'Acme Fashion' })]);
+assert.equal(await ans, 'Acme Fashion');
+ans = askText(lapp, 'Business name?', 60); await must(() => lidSock.sent.length === 2);
+up(lidSock, [msg({ chat: LIDCHAT, fromMe: true, extra: { extendedTextMessage: { text: 'Beta Stores', contextInfo: { stanzaId: lidSock.sent[1].key.id } } } })]);
+assert.equal(await ans, 'Beta Stores');
+ans = askText(lapp, 'Business name?', 60); await must(() => lidSock.sent.length === 3);
+up(lidSock, [msg({ chat: `${CTL}@s.whatsapp.net`, from: `${CUST}@s.whatsapp.net`, text: 'hijack' })]);   // someone else: ignored
+up(lidSock, [msg({ chat: LIDCHAT, fromMe: true, text: 'cancel' })]);
+assert.equal(await ans, null);
+let lp = bs.promptMenu(lidSock, undefined, `${CTL}@s.whatsapp.net`, [CTL], { text: 'Pick', options: opts3 }); await must(() => lidSock.sent.length === 4);
+up(lidSock, [msg({ chat: LIDCHAT, fromMe: true, text: '2' })]);
+assert.equal((await lp).value, 'v2');
+ok('REGRESSION: typed answers (plain or swipe-reply), "cancel" and menu numbers all work when your own chat arrives as a LID');
+
+// 11b2. .menu typed in a LID chat answers in that same chat; an open menu never holds up other messages
+const h5 = new PluginHost({ sessions: fakeSessions }); h5.register(corePlugin); h5.register(menuPlugin); h5.onSocket(lidCtx, lidSock);
+const n5 = lidSock.sent.length;
+up(lidSock, [msg({ chat: LIDCHAT, fromMe: true, text: '.menu' })]);
+await must(() => lidSock.sent.length > n5);
+assert.equal(lidSock.sent[n5].jid, LIDCHAT);                                       // recognised as the own chat: no redirect
+const nPing = lidSock.sent.length;
+up(lidSock, [msg({ chat: LIDCHAT, fromMe: true, text: '.ping' })]);                // menu is still open and waiting
+await must(() => lidSock.sent.length > nPing && /^pong/.test(lastText(lidSock)), 600);
+up(lidSock, [msg({ chat: LIDCHAT, fromMe: true, text: '4' })]);
+await must(() => /\*Settings\*/.test(lastText(lidSock)));
+up(lidSock, [msg({ chat: LIDCHAT, fromMe: true, text: '0' })]); await sleep(40);
+ok('.menu in a LID own chat stays in that chat; with a menu open, other commands (.ping) are still answered at once');
+
+// 11b3. reopening .menu while a question is open replaces the old session: no stray menu, no double save
+const h6sock = fakeSock(`${CTL}:5@s.whatsapp.net`); bs.registerPromptListener(h6sock);
+const h6ctx = online(rec('menu6', CTL), h6sock);   // its own tenant: this test changes the brand name
+const h6 = new PluginHost({ sessions: fakeSessions }); h6.register(menuPlugin); h6.onSocket(h6ctx, h6sock);
+const say6 = (t) => up(h6sock, [msg({ chat: selfJid, fromMe: true, text: t })]);
+say6('.menu'); await must(() => h6sock.sent.length >= 1);
+say6('4'); await must(() => /\*Settings\*/.test(lastText(h6sock)));
+say6('1'); await must(() => /What is your brand name/.test(lastText(h6sock)));          // a question is now open
+const before6 = h6sock.sent.length;
+await sleep(1100); say6('.menu');                                                        // reopen mid-question
+await must(() => h6sock.sent.length === before6 + 1); await sleep(150);
+assert.equal(h6sock.sent.length, before6 + 1, 'the old session must not send anything more');
+assert.match(lastText(h6sock), /Reseller dashboard/);
+say6('4'); await must(() => /\*Settings\*/.test(lastText(h6sock)));
+say6('1'); await must(() => /What is your brand name/.test(lastText(h6sock)));
+const sets = []; const realSet = h6ctx.store('settings').patch.bind(h6ctx.store('settings'));
+say6('Gamma Stores'); await must(() => /Brand name saved/.test(lastText(h6sock)));
+assert.equal((await getSettings(h6ctx)).brandName, 'Gamma Stores');
+say6('0'); await sleep(40);
+ok('reopening .menu mid-question closes the old session cleanly (no stray menu); the new one saves the answer once');
 
 // 11c. .menu typed in a group opens in the owner's own chat; nothing private reaches the group
 const gsock = fakeSock(`${CTL}:5@s.whatsapp.net`);
@@ -281,7 +322,7 @@ await must(() => gsock.sent.length >= 1);
 assert.equal(gsock.sent[0].jid, selfJid, 'dashboard must open in the own chat');
 assert.match(gsock.sent[0].content.text, /Reseller dashboard/);
 assert.ok(!gsock.sent.some((x) => x.jid === GROUP), 'nothing may be posted into the group');
-up(gsock, [msg({ chat: selfJid, fromMe: true, text: '3' })]);   // ⚙️ Settings
+up(gsock, [msg({ chat: selfJid, fromMe: true, text: '4' })]);   // ⚙️ Settings
 await must(() => gsock.sent.length >= 2);
 assert.match(gsock.sent[1].content.text, /\*Settings\*/);
 up(gsock, [msg({ chat: selfJid, fromMe: true, text: '0' })]);
@@ -300,7 +341,7 @@ ok('.admin run in a group answers in the own chat only');
 // 12. settings defaults + patch
 assert.equal((await getSettings(acme)).markupPercent, 0);
 await updateSettings(acme, { brandName: 'Acme' });
-assert.deepEqual(await getSettings(acme), { brandName: 'Acme', contactLine: '', markupPercent: 0, roundingStep: 100, currencySymbol: '₦' });
+assert.deepEqual(await getSettings(acme), { ...DEFAULT_SETTINGS, brandName: 'Acme' });
 ok('settings: defaults, partial updates persist per tenant');
 
 console.log(`\n${passed} stage-2 checks passed`);

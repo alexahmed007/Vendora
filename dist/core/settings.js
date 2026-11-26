@@ -1,4 +1,17 @@
-export const DEFAULT_SETTINGS = { brandName: '', contactLine: '', markupPercent: 0, roundingStep: 100, currencySymbol: '₦' };
+export const DEFAULT_SETTINGS = {
+    brandName: '',
+    contactLine: '',
+    markupPercent: 0,
+    roundingStep: 100,
+    currencySymbol: '₦',
+    postingEnabled: true,
+    postToStatus: false,
+    dailyCap: 40,
+    gapMinSec: 45,
+    gapMaxSec: 120,
+    quietStart: 23,
+    quietEnd: 6,
+};
 export async function getSettings(ctx) {
     const saved = await ctx.store('settings').get('main');
     return { ...DEFAULT_SETTINGS, ...(saved ?? {}) };

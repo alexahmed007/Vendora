@@ -29,6 +29,10 @@ export interface Product {
   priceHistory: Array<{ at: number; cost: number }>;
   /** Vendor message ids that made up this item (used to match "sold out" replies). */
   sourceMessageIds: string[];
+  /** When every target finished (set when status becomes 'posted'). */
+  postedAt?: number | null;
+  /** Why the last attempt failed, if it did. */
+  postError?: string | null;
 }
 
 const catalog = (ctx: TenantContext) => ctx.store('catalog');

@@ -4,7 +4,7 @@ import { notifyAdmin } from './core/adminNotify.js';
 import { rssMb, startMemoryGuard } from './core/memoryGuard.js';
 import { PluginHost } from './core/pluginHost.js';
 import { SessionManager } from './core/sessionManager.js';
-import { registerPromptListener } from './ui/buttonSession.js';
+import { registerPromptListener } from './ui/menuSession.js';
 const sessions = new SessionManager();
 const host = new PluginHost({ sessions });
 host.bind(sessions);

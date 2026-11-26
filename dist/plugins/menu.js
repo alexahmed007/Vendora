@@ -1,35 +1,41 @@
+import { approveItems } from '../core/approve.js';
 import { countByStatus, getProduct, listProducts, saveProduct } from '../core/catalog.js';
+import { queueSummary } from '../core/publisher.js';
 import { definePlugin } from '../core/plugin.js';
 import { renderProduct } from '../core/render.js';
 import { getSettings, updateSettings } from '../core/settings.js';
 import { getVendor, listVendors, removeVendor, saveVendor } from '../core/vendors.js';
 import { formatMoney } from '../lib/pricingEngine.js';
 import { appCtxFrom, askNumber, askText, askValue, back, go, replace, runApp, stay } from '../ui/appUi.js';
+import { publishScreens } from '../ui/publishScreens.js';
 /** The reseller's dashboard: items from vendors, vendor groups, and settings. Numbered, in their own chat. */
 const PAGE = 6;
 const cut = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 const screens = {
+    ...publishScreens,
     // ── home ──────────────────────────────────────────────────────────────────
     home: {
         async view({ ctx }) {
-            const [s, counts, vendors] = await Promise.all([getSettings(ctx), countByStatus(ctx), listVendors(ctx)]);
+            const [s, counts, vendors, q] = await Promise.all([getSettings(ctx), countByStatus(ctx), listVendors(ctx), queueSummary(ctx)]);
             return {
                 title: s.brandName || 'Reseller dashboard',
                 subtitle: 'Control panel',
                 text: [
                     `Status: ${ctx.online ? '✅ connected' : '⚠️ reconnecting'}`,
-                    `Vendor groups: ${vendors.length} · New items: ${counts.new} · Approved: ${counts.approved}`,
+                    `Vendor groups: ${vendors.length} · New items: ${counts.new} · Posted: ${counts.posted}`,
+                    `Posting: ${q.enabled ? '✅ on' : '⏸️ paused'} · today ${q.sentToday}/${q.limitToday} · ${q.pending} in queue${q.failed ? ` · ❌ ${q.failed} failed` : ''}`,
                     `Default markup: ${s.markupPercent}% · Contact line: ${s.contactLine || '_not set_'}`,
                 ].join('\n'),
                 options: [
                     { label: `📦 Items (${counts.new} new)`, value: 'items', description: 'Review what vendors posted' },
+                    { label: '📣 Posting', value: 'posting', description: 'Where to post, queue, limits, kill switch' },
                     { label: '🏪 Vendor groups', value: 'vendors', description: 'Sources, markup per vendor' },
                     { label: '⚙️ Settings', value: 'settings', description: 'Brand, contact line, markup, rounding' },
                     { label: '🔄 Refresh', value: 'refresh' },
                 ],
             };
         },
-        select: (value) => (value === 'items' ? go('items', { page: 0 }) : value === 'vendors' ? go('vendors') : value === 'settings' ? go('settings') : stay()),
+        select: (value) => (value === 'items' ? go('items', { page: 0 }) : value === 'posting' ? go('posting') : value === 'vendors' ? go('vendors') : value === 'settings' ? go('settings') : stay()),
     },
     // ── items ─────────────────────────────────────────────────────────────────
     items: {
@@ -47,6 +53,8 @@ const screens = {
                 options.push({ label: '⬅️ Previous page', value: `page:${page - 1}`, description: '' });
             if (page < pages - 1)
                 options.push({ label: '➡️ Next page', value: `page:${page + 1}`, description: '' });
+            if (all.length > 0)
+                options.push({ label: '✅ Approve all (sure prices only)', value: 'approveall', description: 'Up to 20 at a time' });
             return {
                 title: 'New items',
                 text: all.length ? `Page ${page + 1} of ${pages} · ${all.length} waiting. Format: vendor price → your price.` : 'Nothing new yet. Add a vendor group under Vendor groups, then new posts show up here.',
@@ -58,6 +66,8 @@ const screens = {
                 return replace('items', { page: Number(value.slice(5)) });
             if (value.startsWith('p:'))
                 return go('item', { id: value.slice(2) });
+            if (value === 'approveall')
+                return go('approveall');
             return stay();
         },
     },
@@ -72,7 +82,7 @@ const screens = {
             const photos = p.media.filter((m) => m.type === 'image').length;
             const videos = p.media.length - photos;
             const options = [
-                { label: '✅ Approve', value: 'approve', description: 'Marks it ready to post' },
+                { label: '✅ Approve and post', value: 'approve', description: 'Queued, posted gradually' },
                 { label: '💰 Set my own price', value: 'price' },
                 ...(p.manualPrice !== null ? [{ label: '↩️ Use my markup again', value: 'auto' }] : []),
                 { label: '🚫 Ignore', value: 'ignore', description: 'Hide this item' },
@@ -95,11 +105,15 @@ const screens = {
             if (!p)
                 return back();
             switch (value) {
-                case 'approve':
-                    p.status = 'approved';
-                    await saveProduct(app.ctx, p);
-                    app.notice = '✅ Approved. (Posting to your groups and status arrives in the next update.)';
+                case 'approve': {
+                    const r = await approveItems(app.ctx, [p.id]);
+                    app.notice = r.queuedItems
+                        ? '✅ Approved and queued. I’ll post it gradually.'
+                        : r.noTargets
+                            ? '✅ Approved. But you haven’t chosen where to post yet: Posting → Groups to post to.'
+                            : '✅ Approved.';
                     return back();
+                }
                 case 'ignore':
                     p.status = 'ignored';
                     await saveProduct(app.ctx, p);
@@ -282,6 +296,7 @@ export default definePlugin({
             aliases: ['dashboard'],
             description: 'Open your dashboard',
             cooldownMs: 1_000,
+            interactive: true,
             run: async (c) => {
                 const app = appCtxFrom(c);
                 // The dashboard shows private settings and needs typed replies, so it never runs in a group

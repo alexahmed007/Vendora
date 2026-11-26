@@ -1,6 +1,6 @@
 import { getContentType, jidNormalizedUser, normalizeMessageContent } from '@whiskeysockets/baileys';
 import { config } from '../config.js';
-import { cleanJid } from './jid.js';
+import { cleanJid, ownIdsOf } from './jid.js';
 import type { Services } from './plugin.js';
 import type { TenantContext } from './tenantContext.js';
 
@@ -86,7 +86,7 @@ export async function buildIncoming(
 
   const isOwner = fromMe || ctx.isOwnerJid(senderPn ?? senderJid);
   const isPlatformAdmin = isOwner && config.adminNumber !== '' && ctx.tenant.number === config.adminNumber;
-  const isOwnChat = cleanJid(chatId) === cleanJid(ownJid);
+  const isOwnChat = !chatId.endsWith('@g.us') && (cleanJid(chatId) === cleanJid(ownJid) || ownIdsOf(sock).includes(cleanJid(chatId)));
   const quotedId: string | null = (content as any)[type]?.contextInfo?.stanzaId ?? null;
 
   return {

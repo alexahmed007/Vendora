@@ -65,6 +65,14 @@ export class PluginHost {
     /** A fresh socket exists for this tenant. Public so tests can drive it without a SessionManager. */
     onSocket(ctx, sock) {
         attachRouter(this, ctx, sock);
+        for (const plugin of this.plugins) {
+            try {
+                plugin.onSocket?.(ctx, sock);
+            }
+            catch (e) {
+                ctx.log.error(`${plugin.name}.onSocket: ${e.message}`);
+            }
+        }
         this.startTenant(ctx);
     }
     startTenant(ctx) {
@@ -174,14 +182,20 @@ export class PluginHost {
         if (until && until > now)
             return;
         this.cooldowns.set(key, now + (command.cooldownMs ?? config.commandCooldownMs));
-        try {
-            await command.run({ ...m, args, prefix: config.prefix, commandName: name });
-        }
-        catch (e) {
-            m.ctx.log.error(`command ${command.name}: ${e.stack ?? e}`);
-            // Only the owner sees error text; customers never get internals.
-            if (m.isOwner)
-                await m.reply(`⚠️ ${command.name} failed: ${e.message}`).catch(() => undefined);
-        }
+        const exec = async () => {
+            try {
+                await command.run({ ...m, args, prefix: config.prefix, commandName: name });
+            }
+            catch (e) {
+                m.ctx.log.error(`command ${command.name}: ${e.stack ?? e}`);
+                // Only the owner sees error text; customers never get internals.
+                if (m.isOwner)
+                    await m.reply(`⚠️ ${command.name} failed: ${e.message}`).catch(() => undefined);
+            }
+        };
+        if (command.interactive)
+            void exec();
+        else
+            await exec();
     }
 }

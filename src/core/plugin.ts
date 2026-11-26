@@ -31,6 +31,11 @@ export interface Command {
   groupOnly?: boolean;
   privateOnly?: boolean;
   cooldownMs?: number;
+  /**
+   * The command waits for the user's answers (menus, wizards). It runs detached, so the message
+   * pipeline keeps flowing while it waits: vendor posts, customer DMs and ".post stop" are never held up.
+   */
+  interactive?: boolean;
   run(c: CommandContext): Promise<void>;
 }
 
@@ -47,6 +52,8 @@ export interface Plugin {
   /** Hook order: lower runs first (default 100). E.g. ingestion before AI customer care. */
   priority?: number;
   commands?: Command[];
+  /** Every time a fresh socket appears (including reconnects): attach event listeners here. They die with the socket. */
+  onSocket?(ctx: TenantContext, sock: any): void;
   /** Once per tenant runtime, when its first socket appears. Keep `ctx`, not the socket. */
   onTenantStart?(ctx: TenantContext): Promise<void> | void;
   /** When the tenant is stopped, halted or the process shuts down. */

@@ -204,6 +204,7 @@ export default definePlugin({
       access: 'admin', // only the owner of the control tenant; anyone else is ignored silently
       description: 'Admin menu: customers and system (platform owner)',
       cooldownMs: 500,
+      interactive: true,
       run: async (c) => {
         const { sessions } = c.services;
         const [sub = '', ...a] = c.args;
