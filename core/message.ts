@@ -1,5 +1,5 @@
 import { getContentType, jidNormalizedUser, normalizeMessageContent } from '@whiskeysockets/baileys';
-import { config } from '../config.js';
+import { config } from '../src/config.js';
 import { cleanJid } from './jid.js';
 import type { Services } from './plugin.js';
 import type { TenantContext } from './tenantContext.js';

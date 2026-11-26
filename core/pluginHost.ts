@@ -1,5 +1,5 @@
 import { readdirSync } from 'node:fs';
-import { config } from '../config.js';
+import { config } from '../src/config.js';
 import type { IncomingMessage } from './message.js';
 import type { Command, Plugin, Services } from './plugin.js';
 import { attachRouter } from './router.js';

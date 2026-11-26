@@ -1,4 +1,4 @@
-import { config } from '../config.js';
+import { config } from '../src/config.js';
 import { tenantStore, type Store } from '../store/tenantStore.js';
 import { digits, type TenantRecord } from '../store/tenants.js';
 import { TtlCache } from './ttlCache.js';

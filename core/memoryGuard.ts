@@ -1,4 +1,4 @@
-import { config } from '../config.js';
+import { config } from '../src/config.js';
 
 interface GuardHooks {
   /** Called when RSS crosses the soft limit (true) or falls back under it (false). */

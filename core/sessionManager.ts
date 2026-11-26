@@ -7,7 +7,7 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
 } from '@whiskeysockets/baileys';
-import { config } from '../config.js';
+import { config } from '../src/config.js';
 import { listTenants, patchTenant, isRunnable, type TenantRecord, type TenantStatus } from '../store/tenants.js';
 import { useStoreAuthState, type StoreAuthState } from './dbAuthState.js';
 import { TenantContext } from './tenantContext.js';

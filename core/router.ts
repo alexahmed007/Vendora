@@ -1,4 +1,4 @@
-import { config } from '../config.js';
+import { config } from '../src/config.js';
 import { buildIncoming } from './message.js';
 import type { PluginHost } from './pluginHost.js';
 import type { TenantContext } from './tenantContext.js';
