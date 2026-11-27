@@ -12,6 +12,7 @@ rmSync('./data', { recursive: true, force: true });
 Object.assign(process.env, { ADMIN_NUMBER: '2348012345678', COMMAND_COOLDOWN_MS: '1', TIMEZONE: 'Africa/Lagos', AI_SETTINGS_CACHE_MS: '0', AI_GROUP_PER_10_MIN: '3', AI_CUSTOMER_HOURLY_CAP: '4' });
 
 const { SessionManager } = await import('../dist/core/sessionManager.js');
+const { ensureControlTenant, controlFirst } = await import('../dist/core/bootstrap.js');
 const { PluginHost } = await import('../dist/core/pluginHost.js');
 const { TenantContext } = await import('../dist/core/tenantContext.js');
 const { createTenant, getTenant, patchTenant } = await import('../dist/store/tenants.js');
@@ -56,6 +57,22 @@ const lastText = (s) => s.sent.at(-1)?.content?.text ?? '';
 const started = [], halted = [];
 const fakeSessions = { start: async (t) => { started.push(t); return {}; }, stop: async () => {}, halt: async (id, st) => { halted.push([id, st]); }, get: () => undefined, list: () => [] };
 
+// ═══ 00. the admin account is created from ADMIN_NUMBER ═════════════════════
+{
+  const { listTenants } = await import('../dist/store/tenants.js');
+  assert.equal(await ensureControlTenant(''), null);                                           // no ADMIN_NUMBER: nothing to do
+  const made = await ensureControlTenant('2347099999999');
+  assert.deepEqual([made.id, made.number, made.status, made.plan, made.expiresAt], ['control', '2347099999999', 'pending', 'admin', null]);
+  const again = await ensureControlTenant('2347099999999');                                    // every boot: idempotent
+  assert.equal(again.id, 'control'); assert.equal((await listTenants()).filter((t) => t.number === '2347099999999').length, 1);
+  assert.equal(await ensureControlTenant('2347088888888'), null);                              // "control" exists for another number: never overwritten
+  assert.equal((await getTenant('control')).number, '2347099999999');
+  const list = [{ number: '1', id: 'a' }, { number: '2347099999999', id: 'control' }, { number: '3', id: 'c' }];
+  assert.deepEqual(controlFirst(list, '2347099999999').map((t) => t.id), ['control', 'a', 'c']);
+  ok('ADMIN_NUMBER alone creates the control tenant on an empty database (idempotent, never overwrites a different "control"), and it starts first');
+  await patchTenant('control', { status: 'paused' }); // keep the shared registry tidy for the sections below
+}
+
 // ═══ 0. plan extension ═══════════════════════════════════════════════════════
 const CTL = '2348012345678';
 await createTenant({ id: 'ctl', number: CTL });
@@ -82,8 +99,8 @@ await sleep(600); sayA('.admin extend paused1 7'); await must(() => /paused1/.te
 assert.equal((await getTenant('paused1')).status, 'paused'); assert.ok(!started.some((t) => t.id === 'paused1'));   // paused on purpose: stays paused
 await sleep(600); sayA('.admin'); await must(() => /Admin/.test(lastText(asock)));
 sayA('1'); await must(() => /Customers/.test(lastText(asock)) && /lapsed2/.test(lastText(asock)));
-assert.match(lastText(asock), /4️⃣  \*lapsed2 · expired\*/);
-sayA('4'); await must(() => /Number: 2347000000012/.test(lastText(asock)));
+assert.match(lastText(asock), /5️⃣  \*lapsed2 · expired\*/);   // active1, control, ctl, lapsed, lapsed2, paused1
+sayA('5'); await must(() => /Number: 2347000000012/.test(lastText(asock)));
 assert.match(lastText(asock), /3️⃣  \*📅 Extend 30 days\*/);
 sayA('3'); await must(() => /starting now/.test(lastText(asock)));
 assert.equal((await getTenant('lapsed2')).status, 'active'); assert.equal(started.at(-1).id, 'lapsed2');

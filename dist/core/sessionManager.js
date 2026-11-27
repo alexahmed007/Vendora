@@ -4,6 +4,7 @@ import makeWASocket, { Browsers, DisconnectReason, fetchLatestBaileysVersion, ma
 import { config } from '../config.js';
 import { getTenant, listTenants, patchTenant, isRunnable } from '../store/tenants.js';
 import { useStoreAuthState } from './dbAuthState.js';
+import { controlFirst } from './bootstrap.js';
 import { TenantContext } from './tenantContext.js';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 /**
@@ -38,7 +39,7 @@ export class SessionManager extends EventEmitter {
         const all = await listTenants();
         const tenants = all.filter((t) => isRunnable(t));
         if (all.length === 0) {
-            console.warn('[sessions] no tenants yet. Add one:  npm run cli -- add control <your-number-with-country-code>');
+            console.warn('[sessions] no tenants yet. Set ADMIN_NUMBER (your own number, country code first) and restart: the admin account is created automatically.');
         }
         else if (tenants.length === 0) {
             console.warn(`[sessions] ${all.length} tenant(s) found but none runnable (paused, expired or needs_relink). Check: npm run cli -- list`);
@@ -46,7 +47,7 @@ export class SessionManager extends EventEmitter {
         else {
             console.log(`[sessions] starting ${Math.min(tenants.length, config.maxSessions)} of ${tenants.length} runnable tenant(s)`);
         }
-        const toStart = tenants.slice(0, config.maxSessions);
+        const toStart = controlFirst(tenants).slice(0, config.maxSessions);
         if (tenants.length > toStart.length) {
             console.warn(`[sessions] ${tenants.length} runnable tenants but MAX_SESSIONS=${config.maxSessions}; the rest stay stopped`);
         }

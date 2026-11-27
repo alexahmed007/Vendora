@@ -1,6 +1,5 @@
 import { countByStatus, getProduct, listProducts } from '../core/catalog.js';
 import { approveItems } from '../core/approve.js';
-import { autoPostProblems } from '../core/autopost.js';
 import { clearFailed, enqueueApproved, queueSummary, retryFailed } from '../core/publisher.js';
 import { listJobs } from '../core/queue.js';
 import { getSettings, updateSettings } from '../core/settings.js';
@@ -24,7 +23,6 @@ export const publishScreens = {
             ];
             if (q.pending > 0 && q.nextSendAt > now)
                 lines.push(`Next post in about ${Math.max(1, Math.round((q.nextSendAt - now) / 1000))}s`);
-            lines.splice(1, 0, `Auto-post: ${s.autoPost ? `✅ ON (approves after ${s.autoPostDelayMin} min)` : '⏸️ OFF · you approve each item'}`);
             const options = [
                 { label: s.postingEnabled ? '⏸️ Pause posting' : '▶️ Resume posting', value: 'toggle', description: 'The kill switch' },
                 { label: '👥 Groups to post to', value: 'targets', description: 'Your customer groups' },
@@ -36,32 +34,11 @@ export const publishScreens = {
                 options.push({ label: `📥 Queue approved items (${counts.approved})`, value: 'queueapproved', description: 'Approved but not queued yet' });
             if (q.failed > 0)
                 options.push({ label: `🔁 Retry failed (${q.failed})`, value: 'retry', description: '' });
-            options.push({ label: `🤖 Auto-post: ${s.autoPost ? 'ON' : 'OFF'}`, value: 'auto', description: 'Post safe vendor items without asking' });
-            options.push({ label: '⏳ Auto-post wait (minutes)', value: 'autodelay', description: 'Time to catch “sold out” before posting' });
             return { title: 'Posting', text: lines.join('\n'), options };
         },
-        async select(value, app) {
-            const { ctx } = app;
+        async select(value, { ctx }) {
             const s = await getSettings(ctx);
             switch (value) {
-                case 'auto': {
-                    if (s.autoPost) {
-                        await updateSettings(ctx, { autoPost: false });
-                        return stay('⏸️ Auto-post is OFF. Items wait for your approval again.');
-                    }
-                    const problems = await autoPostProblems(ctx, s);
-                    if (problems.length)
-                        return stay(`⚠️ Auto-post isn’t on yet:\n${problems.map((p) => `• ${p}`).join('\n')}`);
-                    await updateSettings(ctx, { autoPost: true });
-                    return stay('🤖 Auto-post is ON. Clear items are approved and posted gradually. Doubtful ones stay under Items for you.');
-                }
-                case 'autodelay': {
-                    const n = await askNumber(app, 'Minutes to wait before auto-approving an item (0 to 120). Gives the vendor time to say “sold out”.', 0, 120);
-                    if (n === null)
-                        return stay('Cancelled.');
-                    await updateSettings(ctx, { autoPostDelayMin: Math.round(n) });
-                    return stay(`✅ Items wait ${Math.round(n)} min before auto-approval.`);
-                }
                 case 'toggle':
                     await updateSettings(ctx, { postingEnabled: !s.postingEnabled });
                     return stay(s.postingEnabled ? '⏸️ Posting paused. Nothing will be sent.' : '▶️ Posting is on.');

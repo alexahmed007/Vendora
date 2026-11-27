@@ -1,11 +1,10 @@
 import { config } from '../config.js';
 import { noteContact, pruneAudience } from '../core/audience.js';
-import { autoPostProblems, runAutoPost } from '../core/autopost.js';
 import { definePlugin } from '../core/plugin.js';
 import { pruneQueue } from '../core/queue.js';
 import { queueSummary, recoverStale, retryFailed, runOnce } from '../core/publisher.js';
 import { makeSender } from '../core/sender.js';
-import { getSettings, updateSettings } from '../core/settings.js';
+import { updateSettings } from '../core/settings.js';
 import { addTarget, listTargets, removeTarget } from '../core/targets.js';
 import { getVendor } from '../core/vendors.js';
 import { listProducts } from '../core/catalog.js';
@@ -46,15 +45,6 @@ export default definePlugin({
                     ctx.log.info(`posted job ${r.jobId}`);
                 else if (r.kind === 'failed' || r.kind === 'retry')
                     ctx.log.warn(`post ${r.kind}: ${r.error}`);
-            },
-        },
-        {
-            name: 'autopost',
-            everyMs: 30_000,
-            run: async (ctx) => {
-                const r = await runAutoPost(ctx);
-                if (r.approved > 0)
-                    ctx.log.info(`auto-post: approved ${r.approved} item(s)${r.held ? `, holding ${r.held} for review` : ''}`);
             },
         },
         {
@@ -102,36 +92,6 @@ export default definePlugin({
                         await c.replyPrivate(all.length ? `*Posting to*\n${all.map((t) => `• ${t.name}${t.enabled ? '' : ' (off)'}`).join('\n')}` : 'No target groups yet. Open one of your customer groups and type *.target add*.');
                     }
                 }
-            },
-        },
-        {
-            name: 'auto',
-            description: 'Hands-off posting: .auto on | off | status | delay <minutes>',
-            cooldownMs: 1_000,
-            run: async (c) => {
-                const sub = (c.args[0] ?? 'status').toLowerCase();
-                if (sub === 'on') {
-                    const problems = await autoPostProblems(c.ctx);
-                    if (problems.length)
-                        return void (await c.replyPrivate(`⚠️ Auto-post isn’t on yet:\n${problems.map((p) => `• ${p}`).join('\n')}`));
-                    await updateSettings(c.ctx, { autoPost: true });
-                    const s = await getSettings(c.ctx);
-                    return void (await c.replyPrivate(`🤖 Auto-post is ON. New vendor items with a clear price are approved after ${s.autoPostDelayMin} min and posted gradually. Anything doubtful stays in .menu → Items for you. Turn it off any time with *.auto off*.`));
-                }
-                if (sub === 'off') {
-                    await updateSettings(c.ctx, { autoPost: false });
-                    return void (await c.replyPrivate('⏸️ Auto-post is OFF. Items wait for your approval again. Posts already in the queue still go out (use *.post stop* to halt those too).'));
-                }
-                if (sub === 'delay') {
-                    const n = Number(c.args[1]);
-                    if (!Number.isFinite(n) || n < 0 || n > 120)
-                        return void (await c.replyPrivate('Type it like: *.auto delay 10* (0 to 120 minutes).'));
-                    await updateSettings(c.ctx, { autoPostDelayMin: Math.round(n) });
-                    return void (await c.replyPrivate(`⏳ Items now wait ${Math.round(n)} min before auto-approval.`));
-                }
-                const s = await getSettings(c.ctx);
-                const problems = s.autoPost ? await autoPostProblems(c.ctx, s) : [];
-                await c.replyPrivate(`🤖 Auto-post: ${s.autoPost ? '✅ ON' : '⏸️ OFF'}\nWait before approving: ${s.autoPostDelayMin} min · drop if still queued after ${s.autoPostMaxAgeHrs || '∞'} h${problems.length ? `\n⚠️ Can’t run yet:\n${problems.map((p) => `• ${p}`).join('\n')}` : ''}`);
             },
         },
         {

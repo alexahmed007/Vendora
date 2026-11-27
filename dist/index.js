@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { config } from './config.js';
 import { notifyAdmin } from './core/adminNotify.js';
+import { ensureControlTenant } from './core/bootstrap.js';
 import { rssMb, startMemoryGuard } from './core/memoryGuard.js';
 import { PluginHost } from './core/pluginHost.js';
 import { SessionManager } from './core/sessionManager.js';
@@ -53,4 +54,5 @@ startMemoryGuard({
     onCritical: () => shutdown(1), // non-zero exit so the host restarts the process
 });
 setInterval(() => void sessions.enforcePlans(), config.planSweepMs).unref();
+await ensureControlTenant();
 await sessions.startAll();

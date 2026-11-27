@@ -46,7 +46,7 @@ const nameOf = (p: { rawCaption: string }) => (p.rawCaption.split('\n')[0] || 'a
 // ── queueing ────────────────────────────────────────────────────────────────
 
 /** Queue an approved item for every place the reseller posts to. */
-export async function enqueueProduct(ctx: TenantContext, productId: string, opts: { auto?: boolean } = {}): Promise<{ queued: number; reason?: 'no-targets' | 'already-queued' | 'missing' }> {
+export async function enqueueProduct(ctx: TenantContext, productId: string): Promise<{ queued: number; reason?: 'no-targets' | 'already-queued' | 'missing' }> {
   const product = await getProduct(ctx, productId);
   if (!product) return { queued: 0, reason: 'missing' };
   if ((await jobsForProduct(ctx, productId)).some((j) => j.state === 'pending' || j.state === 'sending')) return { queued: 0, reason: 'already-queued' };
@@ -56,7 +56,7 @@ export async function enqueueProduct(ctx: TenantContext, productId: string, opts
   if (settings.postToStatus) targets.push({ type: 'status' });
   if (targets.length === 0) return { queued: 0, reason: 'no-targets' };
 
-  await addJobs(ctx, productId, targets, Date.now(), Boolean(opts.auto));
+  await addJobs(ctx, productId, targets);
   product.status = 'queued';
   product.postError = null;
   await saveProduct(ctx, product);
@@ -141,9 +141,6 @@ export async function runOnce(ctx: TenantContext, deps: PublishDeps): Promise<Ru
   const product = await getProduct(ctx, job.productId);
   if (!product) return skip('the item was removed');
   if (product.status === 'ignored' || product.status === 'soldout') return skip(`the item is ${product.status}`);
-  if (job.auto && settings.autoPostMaxAgeHrs > 0 && now - job.createdAt > settings.autoPostMaxAgeHrs * 3_600_000) {
-    return skip(`auto-post backlog: waited more than ${settings.autoPostMaxAgeHrs}h, so it was not posted stale`);
-  }
   if (job.target.type === 'group') {
     const t = await getTarget(ctx, job.target.jid);
     if (!t || !t.enabled) return skip('that group is no longer a posting target');
