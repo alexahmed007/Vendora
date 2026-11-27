@@ -34,6 +34,12 @@ export const config = {
     maxImageBytes: num(process.env.MAX_IMAGE_MB, 10) * 1024 * 1024,
     maxVideoBytes: num(process.env.MAX_VIDEO_MB, 25) * 1024 * 1024,
     statusAudienceMax: num(process.env.STATUS_AUDIENCE_MAX, 800),
+    // AI customer care
+    aiMaxConcurrent: num(process.env.AI_MAX_CONCURRENT, 2),
+    aiCustomerHourlyCap: num(process.env.AI_CUSTOMER_HOURLY_CAP, 10),
+    aiGroupPer10Min: num(process.env.AI_GROUP_PER_10_MIN, 6),
+    aiMaxMessageAgeMin: num(process.env.AI_MAX_MESSAGE_AGE_MIN, 30),
+    aiSettingsCacheMs: num(process.env.AI_SETTINGS_CACHE_MS, 5_000),
     // Capacity
     maxSessions: num(process.env.MAX_SESSIONS, 3),
     sessionStartStaggerMs: num(process.env.SESSION_START_STAGGER_MS, 4000),

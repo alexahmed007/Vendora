@@ -1,4 +1,4 @@
-# reseller-bot (stages 1-4: multi-tenant core, dashboard, vendor ingestion, posting)
+# reseller-bot (stages 1-5: multi-tenant core, dashboard, vendor ingestion, posting, AI customer care)
 
 One process, one WhatsApp session per customer ("tenant"). Built on the old bot's store/plugin ideas,
 without the economy/games and without single-tenant globals.
@@ -19,6 +19,7 @@ Link it (WhatsApp > Linked devices > Link with phone number). From then on, in y
     .source add | remove | list  # type in a vendor's group to make it a source
     .target add | remove | list  # type in one of YOUR customer groups to post approved items there
     .post stop | start | status | retry    # kill switch and queue status
+    .ai on | off | always | status | pause | resume | test <question>   # AI customer care
     .ping  .help
 
 ## How vendor posts become items (stage 3)
@@ -43,6 +44,22 @@ Approve an item (`.menu` -> Items) and it is queued for every group set with `.t
 - Status audience = people who messaged you, contacts WhatsApp announces, and members of your posting groups (WhatsApp gives linked devices no address book). Treat status posting as experimental: try one item and confirm it shows.
 - Items with no confident price are skipped by "Approve all"; approve those one by one.
 
+## AI customer care (stage 5)
+Turn it on with `.ai on` or `.menu` -> AI customer care. It is OFF by default and needs an AI key on the server (see .env.example).
+- **DMs:** "away" mode waits for you to answer first (90s by default) and answers at once when you're closed; "always" answers everyone.
+  It stays quiet in a chat while you're typing there (30 min), and after it hands a customer to you.
+- **Posts in your groups:** only customers who reply to (quote) one of the posts the bot sent, in a group you post to. Group chatter is never answered, and vendor groups never.
+- **Status:** replies to your status are matched to the item posted.
+- **Always from your items:** the model is given only the item the customer means (found from the post they replied to, or from their words), your Shop info,
+  and your hours. It never sees the vendor's name or price.
+- **Safety net:** every reply is checked. An invented price, a leak of "wholesale/vendor/supplier" or a vendor's name, "as an AI", or an over-long reply is
+  replaced with "let me confirm with the owner", and you get a lead.
+- **Hands over to you, no model involved:** wants to order or pay, "last price", "speak to the owner", complaints, photos/voice notes. You get a private
+  notice with a wa.me link; Leads are in the dashboard. "Yes please" after it offered to tell you counts as an order.
+- **Limits:** a daily cap per reseller, a per-customer hourly cap, groups spaced 8s apart and capped, at most 2 model calls at once across the server.
+- `.ai test <question>` shows what it would say, privately, sending nothing.
+- Providers (tried in order): AI_BASE_URL+AI_API_KEY (any OpenAI-compatible), GROQ_API_KEY, GEMINI_API_KEY. Keys are YOURS; cost is capped by the per-reseller daily limit.
+
 ## Layout
     src/core/sessionManager.ts   one socket per tenant: backoff + jitter, safe teardown, pairing, plan enforcement
     src/core/pluginHost.ts       loads plugins (dynamic import), commands, hooks, per-tenant schedules
@@ -57,7 +74,9 @@ Approve an item (`.menu` -> Items) and it is queued for every group set with `.t
     src/lib/postingPolicy.ts     warm-up ramp, daily cap, quiet hours, gaps (pure)
     src/core/catalog.ts vendors.ts render.ts settings.ts    items, vendor sources, caption/price preview, per-reseller settings
     src/core/queue.ts publisher.ts sender.ts targets.ts audience.ts approve.ts   the posting pipeline
-    src/plugins/                 core, admin (menu), menu (dashboard), ingest (vendor posts), publish (posting). Add a file here to add a plugin.
+    src/lib/productSearch.ts replyGuard.ts aiPrompt.ts      find the item, check replies, build the prompt (pure)
+    src/core/ai.ts aicare.ts leads.ts                       model providers + failover, the care engine, leads and the reply log
+    src/plugins/                 core, admin (menu), menu (dashboard), ingest (vendor posts), publish (posting), aicare (customer care). Add a file here to add a plugin.
     src/store/                   pluginStore (patched), tenantStore (table-per-tenant), tenants registry
 
 ## Writing a plugin (src/plugins/example.ts)
@@ -82,9 +101,9 @@ Approve an item (`.menu` -> Items) and it is queued for every group set with `.t
 
 ## Tests
     npm test    # build + 10 store/auth checks, 17 router/host/menu checks, 16 parsing/ingestion/dashboard/admin checks
-                # 17 posting checks. (fake sockets + local JSON files; refuses to run if a DB URL is set, ignores .env)
+                # 17 posting checks, 14 plan-extension/AI-care checks. (fake sockets + local JSON files; refuses to run if a DB URL is set, ignores .env)
 
 ## Not yet tested (needs a real phone)
-Real vendor message shapes (album headers, file hashes), downloading and re-sending real photos, status posts actually appearing,
+Real vendor message shapes (album headers, file hashes), real AI answers (model names and quality), how real customers' status/group replies arrive, downloading and re-sending real photos, status posts actually appearing,
 whether WhatsApp tolerates the posting pace on a real number, memory per *online* session.
 Please send me captions your vendors really use that the preview gets wrong.

@@ -264,7 +264,7 @@ ok('dashboard: bad price re-asked, own price saved (₦18,500), item approved');
 // vendors + settings through the menu
 await sleep(1100);
 say('.menu'); await must(() => /New items: 1/.test(lastText(rsock)));
-say('3'); await must(() => /Vendor groups/.test(lastText(rsock)) && /Shoe Plug/.test(lastText(rsock)));
+say('4'); await must(() => /Vendor groups/.test(lastText(rsock)) && /Shoe Plug/.test(lastText(rsock)));
 say('1'); await must(() => /importing/.test(lastText(rsock)));
 say('1'); await must(() => /Markup % for this vendor/.test(lastText(rsock)));
 say('35'); await must(() => /Markup for this vendor: 35%/.test(lastText(rsock)));

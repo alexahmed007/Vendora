@@ -26,6 +26,27 @@ export interface TenantSettings {
   /** No posting between these local hours (start === end disables). */
   quietStart: number;
   quietEnd: number;
+
+  // ── AI customer care ──
+  /** off: never replies · away: steps in when you don't answer (or you're closed) · always: answers every customer */
+  aiMode: 'off' | 'away' | 'always';
+  /** Answer customers who reply to your posts inside your groups. */
+  aiReplyInGroups: boolean;
+  /** Answer customers who reply to your status. */
+  aiReplyToStatus: boolean;
+  /** In "away" mode: how long to wait for you to answer first. */
+  aiAwayDelaySec: number;
+  /** After you type in a chat, the assistant stays quiet there for this many minutes. */
+  aiOwnerQuietMin: number;
+  /** Most AI replies per day. */
+  aiDailyCap: number;
+  /** Business hours (local). Outside them, "away" mode answers at once. Equal = always open. */
+  hoursStart: number;
+  hoursEnd: number;
+  /** Delivery, payment, location, returns: the ONLY facts the assistant may quote besides your items. */
+  shopInfo: string;
+  /** Extra tone notes, e.g. "Use light Pidgin when the customer does." */
+  aiInstructions: string;
 }
 
 export const DEFAULT_SETTINGS: TenantSettings = {
@@ -41,6 +62,16 @@ export const DEFAULT_SETTINGS: TenantSettings = {
   gapMaxSec: 120,
   quietStart: 23,
   quietEnd: 6,
+  aiMode: 'off',
+  aiReplyInGroups: true,
+  aiReplyToStatus: true,
+  aiAwayDelaySec: 90,
+  aiOwnerQuietMin: 30,
+  aiDailyCap: 150,
+  hoursStart: 8,
+  hoursEnd: 21,
+  shopInfo: '',
+  aiInstructions: '',
 };
 
 export async function getSettings(ctx: TenantContext): Promise<TenantSettings> {

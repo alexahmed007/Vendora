@@ -33,6 +33,29 @@ async function addCustomer(sessions: SessionManager, id: string, number: string,
   return tenant;
 }
 
+const fmtWhen = (ts: number): string =>
+  new Intl.DateTimeFormat('en-GB', { timeZone: config.timeZone, dateStyle: 'medium', timeStyle: 'short' }).format(new Date(ts));
+
+/**
+ * Add `days` to a customer's plan. An active plan keeps its end date and adds on top; a plan that
+ * has already run out restarts from NOW (no back-dating: the lapsed days are not billed).
+ * A customer whose plan had expired is switched back on and their session starts straight away.
+ */
+async function extendCustomer(sessions: SessionManager, t: TenantRecord, days: number): Promise<{ expiresAt: number; wasExpired: boolean; started: boolean }> {
+  const now = Date.now();
+  const base = t.expiresAt && t.expiresAt > now ? t.expiresAt : now;
+  const expiresAt = base + days * DAY;
+  const wasExpired = t.status === 'expired';
+  await patchTenant(t.id, { expiresAt, ...(wasExpired ? { status: 'active' as const } : {}) });
+  let started = false;
+  if (wasExpired) started = Boolean(await sessions.start({ ...t, expiresAt, status: 'active' }));
+  return { expiresAt, wasExpired, started };
+}
+
+const extendNote = (r: { expiresAt: number; wasExpired: boolean; started: boolean }, days: number): string =>
+  `📅 Extended by ${days} days: runs until ${fmtWhen(r.expiresAt)}.` +
+  (r.wasExpired ? (r.started ? ' ▶️ Their session is starting now; if they need to re-link, the pairing code will arrive here.' : ' ⚠️ I couldn’t start their session (at capacity or memory guard closed). Try Start / resume from their page.') : '');
+
 async function startTenantAgain(sessions: SessionManager, t: TenantRecord, restart: boolean): Promise<boolean> {
   if (restart) await sessions.stop(t.id);
   await patchTenant(t.id, { status: 'active' });
@@ -166,9 +189,7 @@ function adminScreens(sessions: SessionManager): ScreenMap {
           case 'ext7':
           case 'ext30': {
             const n = value === 'ext7' ? 7 : 30;
-            const base = t.expiresAt && t.expiresAt > Date.now() ? t.expiresAt : Date.now();
-            await patchTenant(t.id, { expiresAt: base + n * DAY, ...(t.status === 'expired' ? { status: 'paused' as const } : {}) });
-            return stay(`📅 Extended by ${n} days.${t.status === 'expired' ? ' Choose Start / resume to bring them back.' : ''}`);
+            return stay(extendNote(await extendCustomer(sessions, t, n), n));
           }
           default:
             return stay();
@@ -274,10 +295,7 @@ export default definePlugin({
             const t = id ? await getTenant(id) : null;
             const n = asDays(days);
             if (!t || n === null) return void (await c.replyPrivate(HELP));
-            const base = t.expiresAt && t.expiresAt > Date.now() ? t.expiresAt : Date.now();
-            const expiresAt = base + n * DAY;
-            await patchTenant(t.id, { expiresAt, ...(t.status === 'expired' ? { status: 'active' as const } : {}) });
-            await c.replyPrivate(`📅 ${t.id} now runs until ${new Date(expiresAt).toISOString().slice(0, 10)}.${t.status === 'expired' ? ' Use .admin resume to start it.' : ''}`);
+            await c.replyPrivate(`${t.id}: ${extendNote(await extendCustomer(sessions, t, n), n)}`);
             return;
           }
 

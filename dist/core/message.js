@@ -33,6 +33,7 @@ export async function buildIncoming(ctx, sock, services, raw, isCatchUp) {
     const isPlatformAdmin = isOwner && config.adminNumber !== '' && ctx.tenant.number === config.adminNumber;
     const isOwnChat = !chatId.endsWith('@g.us') && (cleanJid(chatId) === cleanJid(ownJid) || ownIdsOf(sock).includes(cleanJid(chatId)));
     const quotedId = content[type]?.contextInfo?.stanzaId ?? null;
+    const quotedChat = content[type]?.contextInfo?.remoteJid ?? null;
     return {
         ctx,
         sock,
@@ -52,6 +53,7 @@ export async function buildIncoming(ctx, sock, services, raw, isCatchUp) {
         pushName: raw.pushName ?? '',
         text: textOf(content),
         quotedId,
+        quotedChat,
         timestamp: tsOf(raw),
         isCatchUp,
         isOwner,

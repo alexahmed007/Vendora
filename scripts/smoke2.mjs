@@ -238,7 +238,7 @@ const say = (text) => up(e2e, [msg({ chat: selfJid, fromMe: true, text })]);
 say('.menu');
 await must(() => e2e.sent.length >= 1);
 assert.match(e2e.sent[0].content.text, /Reseller dashboard/);
-say('4');                                                     // ⚙️ Settings (Home: 1 Items, 2 Posting, 3 Vendor groups, 4 Settings)
+say('5');                                                     // ⚙️ Settings (Home: 1 Items, 2 Posting, 3 AI care, 4 Vendor groups, 5 Settings)
 await must(() => e2e.sent.length >= 2);
 assert.match(e2e.sent[1].content.text, /\*Settings\*/);
 say('3');                                                     // 💹 Default markup %
@@ -286,7 +286,7 @@ assert.equal(lidSock.sent[n5].jid, LIDCHAT);                                    
 const nPing = lidSock.sent.length;
 up(lidSock, [msg({ chat: LIDCHAT, fromMe: true, text: '.ping' })]);                // menu is still open and waiting
 await must(() => lidSock.sent.length > nPing && /^pong/.test(lastText(lidSock)), 600);
-up(lidSock, [msg({ chat: LIDCHAT, fromMe: true, text: '4' })]);
+up(lidSock, [msg({ chat: LIDCHAT, fromMe: true, text: '5' })]);
 await must(() => /\*Settings\*/.test(lastText(lidSock)));
 up(lidSock, [msg({ chat: LIDCHAT, fromMe: true, text: '0' })]); await sleep(40);
 ok('.menu in a LID own chat stays in that chat; with a menu open, other commands (.ping) are still answered at once');
@@ -297,14 +297,14 @@ const h6ctx = online(rec('menu6', CTL), h6sock);   // its own tenant: this test 
 const h6 = new PluginHost({ sessions: fakeSessions }); h6.register(menuPlugin); h6.onSocket(h6ctx, h6sock);
 const say6 = (t) => up(h6sock, [msg({ chat: selfJid, fromMe: true, text: t })]);
 say6('.menu'); await must(() => h6sock.sent.length >= 1);
-say6('4'); await must(() => /\*Settings\*/.test(lastText(h6sock)));
+say6('5'); await must(() => /\*Settings\*/.test(lastText(h6sock)));
 say6('1'); await must(() => /What is your brand name/.test(lastText(h6sock)));          // a question is now open
 const before6 = h6sock.sent.length;
 await sleep(1100); say6('.menu');                                                        // reopen mid-question
 await must(() => h6sock.sent.length === before6 + 1); await sleep(150);
 assert.equal(h6sock.sent.length, before6 + 1, 'the old session must not send anything more');
 assert.match(lastText(h6sock), /Reseller dashboard/);
-say6('4'); await must(() => /\*Settings\*/.test(lastText(h6sock)));
+say6('5'); await must(() => /\*Settings\*/.test(lastText(h6sock)));
 say6('1'); await must(() => /What is your brand name/.test(lastText(h6sock)));
 const sets = []; const realSet = h6ctx.store('settings').patch.bind(h6ctx.store('settings'));
 say6('Gamma Stores'); await must(() => /Brand name saved/.test(lastText(h6sock)));
@@ -322,7 +322,7 @@ await must(() => gsock.sent.length >= 1);
 assert.equal(gsock.sent[0].jid, selfJid, 'dashboard must open in the own chat');
 assert.match(gsock.sent[0].content.text, /Reseller dashboard/);
 assert.ok(!gsock.sent.some((x) => x.jid === GROUP), 'nothing may be posted into the group');
-up(gsock, [msg({ chat: selfJid, fromMe: true, text: '4' })]);   // ⚙️ Settings
+up(gsock, [msg({ chat: selfJid, fromMe: true, text: '5' })]);   // ⚙️ Settings
 await must(() => gsock.sent.length >= 2);
 assert.match(gsock.sent[1].content.text, /\*Settings\*/);
 up(gsock, [msg({ chat: selfJid, fromMe: true, text: '0' })]);

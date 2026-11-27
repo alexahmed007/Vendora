@@ -11,6 +11,16 @@ export const DEFAULT_SETTINGS = {
     gapMaxSec: 120,
     quietStart: 23,
     quietEnd: 6,
+    aiMode: 'off',
+    aiReplyInGroups: true,
+    aiReplyToStatus: true,
+    aiAwayDelaySec: 90,
+    aiOwnerQuietMin: 30,
+    aiDailyCap: 150,
+    hoursStart: 8,
+    hoursEnd: 21,
+    shopInfo: '',
+    aiInstructions: '',
 };
 export async function getSettings(ctx) {
     const saved = await ctx.store('settings').get('main');

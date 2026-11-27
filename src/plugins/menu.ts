@@ -7,6 +7,8 @@ import { getSettings, updateSettings } from '../core/settings.js';
 import { getVendor, listVendors, removeVendor, saveVendor } from '../core/vendors.js';
 import { formatMoney } from '../lib/pricingEngine.js';
 import { appCtxFrom, askNumber, askText, askValue, back, go, replace, runApp, stay, type ScreenMap } from '../ui/appUi.js';
+import { aiScreens } from '../ui/aiScreens.js';
+import { listLeads } from '../core/leads.js';
 import { publishScreens } from '../ui/publishScreens.js';
 
 /** The reseller's dashboard: items from vendors, vendor groups, and settings. Numbered, in their own chat. */
@@ -15,10 +17,11 @@ const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` 
 
 const screens: ScreenMap = {
   ...publishScreens,
+  ...aiScreens,
   // ── home ──────────────────────────────────────────────────────────────────
   home: {
     async view({ ctx }) {
-      const [s, counts, vendors, q] = await Promise.all([getSettings(ctx), countByStatus(ctx), listVendors(ctx), queueSummary(ctx)]);
+      const [s, counts, vendors, q, leads] = await Promise.all([getSettings(ctx), countByStatus(ctx), listVendors(ctx), queueSummary(ctx), listLeads(ctx, { open: true })]);
       return {
         title: s.brandName || 'Reseller dashboard',
         subtitle: 'Control panel',
@@ -26,18 +29,20 @@ const screens: ScreenMap = {
           `Status: ${ctx.online ? '✅ connected' : '⚠️ reconnecting'}`,
           `Vendor groups: ${vendors.length} · New items: ${counts.new} · Posted: ${counts.posted}`,
           `Posting: ${q.enabled ? '✅ on' : '⏸️ paused'} · today ${q.sentToday}/${q.limitToday} · ${q.pending} in queue${q.failed ? ` · ❌ ${q.failed} failed` : ''}`,
+          `AI care: ${s.aiMode === 'off' ? '⏸️ off' : `✅ ${s.aiMode}`}${leads.length ? ` · 🙋 ${leads.length} lead${leads.length === 1 ? '' : 's'}` : ''}`,
           `Default markup: ${s.markupPercent}% · Contact line: ${s.contactLine || '_not set_'}`,
         ].join('\n'),
         options: [
           { label: `📦 Items (${counts.new} new)`, value: 'items', description: 'Review what vendors posted' },
           { label: '📣 Posting', value: 'posting', description: 'Where to post, queue, limits, kill switch' },
+          { label: '🤖 AI customer care', value: 'ai', description: 'Answers customers, hands you the orders' },
           { label: '🏪 Vendor groups', value: 'vendors', description: 'Sources, markup per vendor' },
           { label: '⚙️ Settings', value: 'settings', description: 'Brand, contact line, markup, rounding' },
           { label: '🔄 Refresh', value: 'refresh' },
         ],
       };
     },
-    select: (value) => (value === 'items' ? go('items', { page: 0 }) : value === 'posting' ? go('posting') : value === 'vendors' ? go('vendors') : value === 'settings' ? go('settings') : stay()),
+    select: (value) => (value === 'items' ? go('items', { page: 0 }) : value === 'posting' ? go('posting') : value === 'ai' ? go('ai') : value === 'vendors' ? go('vendors') : value === 'settings' ? go('settings') : stay()),
   },
 
   // ── items ─────────────────────────────────────────────────────────────────

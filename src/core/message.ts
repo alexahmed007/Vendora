@@ -33,6 +33,8 @@ export interface IncomingMessage {
   text: string;
   /** Message id this one replies to, if any. */
   quotedId: string | null;
+  /** The chat the quoted message lives in ('status@broadcast' for a reply to a status). */
+  quotedChat: string | null;
   timestamp: number;
   /** Delivered while the bot was offline (arrived as "append"). Don't auto-reply to old ones. */
   isCatchUp: boolean;
@@ -88,6 +90,7 @@ export async function buildIncoming(
   const isPlatformAdmin = isOwner && config.adminNumber !== '' && ctx.tenant.number === config.adminNumber;
   const isOwnChat = !chatId.endsWith('@g.us') && (cleanJid(chatId) === cleanJid(ownJid) || ownIdsOf(sock).includes(cleanJid(chatId)));
   const quotedId: string | null = (content as any)[type]?.contextInfo?.stanzaId ?? null;
+  const quotedChat: string | null = (content as any)[type]?.contextInfo?.remoteJid ?? null;
 
   return {
     ctx,
@@ -108,6 +111,7 @@ export async function buildIncoming(
     pushName: raw.pushName ?? '',
     text: textOf(content),
     quotedId,
+    quotedChat,
     timestamp: tsOf(raw),
     isCatchUp,
     isOwner,

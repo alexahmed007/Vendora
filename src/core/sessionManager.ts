@@ -8,7 +8,7 @@ import makeWASocket, {
   makeCacheableSignalKeyStore,
 } from '@whiskeysockets/baileys';
 import { config } from '../config.js';
-import { listTenants, patchTenant, isRunnable, type TenantRecord, type TenantStatus } from '../store/tenants.js';
+import { getTenant, listTenants, patchTenant, isRunnable, type TenantRecord, type TenantStatus } from '../store/tenants.js';
 import { useStoreAuthState, type StoreAuthState } from './dbAuthState.js';
 import { TenantContext } from './tenantContext.js';
 
@@ -127,6 +127,10 @@ export class SessionManager extends EventEmitter {
   async enforcePlans(): Promise<void> {
     const now = Date.now();
     for (const rt of [...this.runtimes.values()]) {
+      // Re-read the record: an extension (or a sudo change) made while the session runs lives in the
+      // store, and the in-memory copy would otherwise keep the OLD expiry and cut a paid customer off.
+      const fresh = await getTenant(rt.ctx.id).catch(() => null);
+      if (fresh) Object.assign(rt.ctx.tenant, fresh);
       const t = rt.ctx.tenant;
       if (t.expiresAt !== null && t.expiresAt <= now) await this.haltRuntime(rt, 'expired', 'plan expired');
     }
