@@ -18,6 +18,8 @@ export interface PostJob {
   error?: string | null;
   /** WhatsApp message ids that were sent, so replies can be tied back to the product. */
   sentIds?: string[];
+  /** Queued by auto-post: dropped instead of posted if it waits longer than autoPostMaxAgeHrs. */
+  auto?: boolean;
 }
 
 export interface PostMeta {
@@ -38,10 +40,10 @@ const sentIndex = (ctx: TenantContext) => ctx.store('sent_index');
 
 export const newJobId = (): string => `j${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
-export async function addJobs(ctx: TenantContext, productId: string, targets: JobTarget[], now = Date.now()): Promise<PostJob[]> {
+export async function addJobs(ctx: TenantContext, productId: string, targets: JobTarget[], now = Date.now(), auto = false): Promise<PostJob[]> {
   const created: PostJob[] = [];
   for (const target of targets) {
-    const job: PostJob = { id: newJobId(), productId, target, state: 'pending', attempts: 0, notBefore: now, createdAt: now + created.length };
+    const job: PostJob = { id: newJobId(), productId, target, state: 'pending', attempts: 0, notBefore: now, createdAt: now + created.length, ...(auto ? { auto: true } : {}) };
     await jobs(ctx).set(job.id, job);
     created.push(job);
   }

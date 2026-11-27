@@ -18,6 +18,12 @@ export interface TenantSettings {
   postingEnabled: boolean;
   /** Also post each item to the reseller's WhatsApp status. */
   postToStatus: boolean;
+  /** Hands-off mode: safe vendor items are approved and queued automatically (see core/autopost.ts). */
+  autoPost: boolean;
+  /** Minutes an item waits after it arrives before it is auto-approved (time for "sold out" / corrections). */
+  autoPostDelayMin: number;
+  /** Auto-queued posts still waiting after this many hours are dropped, not posted stale (0 = never). */
+  autoPostMaxAgeHrs: number;
   /** Most posts per day once the account has warmed up. */
   dailyCap: number;
   /** Random pause between two posts, in seconds. */
@@ -57,6 +63,9 @@ export const DEFAULT_SETTINGS: TenantSettings = {
   currencySymbol: '₦',
   postingEnabled: true,
   postToStatus: false,
+  autoPost: false,
+  autoPostDelayMin: 5,
+  autoPostMaxAgeHrs: 12,
   dailyCap: 40,
   gapMinSec: 45,
   gapMaxSec: 120,

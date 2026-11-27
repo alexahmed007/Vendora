@@ -23,7 +23,7 @@ export async function notifyOwner(ctx, key, text) {
 const nameOf = (p) => (p.rawCaption.split('\n')[0] || 'an item').slice(0, 40);
 // ── queueing ────────────────────────────────────────────────────────────────
 /** Queue an approved item for every place the reseller posts to. */
-export async function enqueueProduct(ctx, productId) {
+export async function enqueueProduct(ctx, productId, opts = {}) {
     const product = await getProduct(ctx, productId);
     if (!product)
         return { queued: 0, reason: 'missing' };
@@ -35,7 +35,7 @@ export async function enqueueProduct(ctx, productId) {
         targets.push({ type: 'status' });
     if (targets.length === 0)
         return { queued: 0, reason: 'no-targets' };
-    await addJobs(ctx, productId, targets);
+    await addJobs(ctx, productId, targets, Date.now(), Boolean(opts.auto));
     product.status = 'queued';
     product.postError = null;
     await saveProduct(ctx, product);
@@ -122,6 +122,9 @@ export async function runOnce(ctx, deps) {
         return skip('the item was removed');
     if (product.status === 'ignored' || product.status === 'soldout')
         return skip(`the item is ${product.status}`);
+    if (job.auto && settings.autoPostMaxAgeHrs > 0 && now - job.createdAt > settings.autoPostMaxAgeHrs * 3_600_000) {
+        return skip(`auto-post backlog: waited more than ${settings.autoPostMaxAgeHrs}h, so it was not posted stale`);
+    }
     if (job.target.type === 'group') {
         const t = await getTarget(ctx, job.target.jid);
         if (!t || !t.enabled)

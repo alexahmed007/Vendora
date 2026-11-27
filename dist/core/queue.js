@@ -4,10 +4,10 @@ const stats = (ctx) => ctx.store('post_stats');
 const meta = (ctx) => ctx.store('post_meta');
 const sentIndex = (ctx) => ctx.store('sent_index');
 export const newJobId = () => `j${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-export async function addJobs(ctx, productId, targets, now = Date.now()) {
+export async function addJobs(ctx, productId, targets, now = Date.now(), auto = false) {
     const created = [];
     for (const target of targets) {
-        const job = { id: newJobId(), productId, target, state: 'pending', attempts: 0, notBefore: now, createdAt: now + created.length };
+        const job = { id: newJobId(), productId, target, state: 'pending', attempts: 0, notBefore: now, createdAt: now + created.length, ...(auto ? { auto: true } : {}) };
         await jobs(ctx).set(job.id, job);
         created.push(job);
     }

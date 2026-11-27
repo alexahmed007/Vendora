@@ -33,6 +33,8 @@ export interface Product {
   postedAt?: number | null;
   /** Why the last attempt failed, if it did. */
   postError?: string | null;
+  /** Approved by auto-post rather than by the owner. */
+  autoApproved?: boolean;
 }
 
 const catalog = (ctx: TenantContext) => ctx.store('catalog');

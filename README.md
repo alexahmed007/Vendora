@@ -1,4 +1,4 @@
-# reseller-bot (stages 1-5: multi-tenant core, dashboard, vendor ingestion, posting, AI customer care)
+# reseller-bot (stages 1-6: multi-tenant core, dashboard, vendor ingestion, posting, AI customer care, auto-post)
 
 One process, one WhatsApp session per customer ("tenant"). Built on the old bot's store/plugin ideas,
 without the economy/games and without single-tenant globals.
@@ -19,6 +19,7 @@ Link it (WhatsApp > Linked devices > Link with phone number). From then on, in y
     .source add | remove | list  # type in a vendor's group to make it a source
     .target add | remove | list  # type in one of YOUR customer groups to post approved items there
     .post stop | start | status | retry    # kill switch and queue status
+    .auto on | off | status | delay <min>   # hands-off posting (stage 6)
     .ai on | off | always | status | pause | resume | test <question>   # AI customer care
     .ping  .help
 
@@ -59,6 +60,18 @@ Turn it on with `.ai on` or `.menu` -> AI customer care. It is OFF by default an
 - **Limits:** a daily cap per reseller, a per-customer hourly cap, groups spaced 8s apart and capped, at most 2 model calls at once across the server.
 - `.ai test <question>` shows what it would say, privately, sending nothing.
 - Providers (tried in order): AI_BASE_URL+AI_API_KEY (any OpenAI-compatible), GROQ_API_KEY, GEMINI_API_KEY. Keys are YOURS; cost is capped by the per-reseller daily limit.
+
+## Auto-post (stage 6): no more approving one by one
+Turn it on with `.auto on` or `.menu` -> Posting -> Auto-post. It is OFF by default. When on, new vendor items that pass a strict safety gate are approved and queued by themselves,
+then go out through the same slow, limited posting pipeline as before (random gaps, daily cap, warm-up, quiet hours, kill switch).
+- **It refuses to switch on** until you have set your contact line, a markup above 0%, and at least one posting group (or status).
+- **Hold period** (default 5 min, `.auto delay <min>`): an item waits after it arrives, so a vendor's "sold out" or a corrected post can stop it first.
+- **The gate.** An item is auto-approved only if all of these are true; otherwise it stays under `.menu` -> Items for you, and you get ONE message listing what was held and why:
+  clear price (not a shaky guess) · has a photo/video · markup above 0% · no vendor phone (even spaced like `0801 234 5678`), email, link, handle or vendor name left in the caption · the caption still shows your selling price.
+- **Backlog control:** it never queues more than one day's posting allowance (the daily limit counts every group separately, so 3 groups at 40/day = about 13 items/day).
+  Auto-queued posts still waiting after 12 hours are dropped instead of going out stale (owner-approved posts are never dropped). Items older than that are left for you.
+- Your own price (set in Items) is trusted. `.post stop` stops auto-approval as well as sending.
+- Not covered yet: a per-vendor on/off switch (it is all vendors), and telling you when a vendor changes the price of an item already posted.
 
 ## Layout
     src/core/sessionManager.ts   one socket per tenant: backoff + jitter, safe teardown, pairing, plan enforcement
@@ -101,7 +114,7 @@ Turn it on with `.ai on` or `.menu` -> AI customer care. It is OFF by default an
 
 ## Tests
     npm test    # build + 10 store/auth checks, 17 router/host/menu checks, 16 parsing/ingestion/dashboard/admin checks
-                # 17 posting checks, 14 plan-extension/AI-care checks. (fake sockets + local JSON files; refuses to run if a DB URL is set, ignores .env)
+                # 17 posting checks, 14 plan-extension/AI-care checks, 9 auto-post checks. (fake sockets + local JSON files; refuses to run if a DB URL is set, ignores .env)
 
 ## Not yet tested (needs a real phone)
 Real vendor message shapes (album headers, file hashes), real AI answers (model names and quality), how real customers' status/group replies arrive, downloading and re-sending real photos, status posts actually appearing,
